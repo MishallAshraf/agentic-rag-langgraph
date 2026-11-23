@@ -1,0 +1,51 @@
+# LLM-drafted test cases. Check each against its page in the PDF, fix or delete it,
+# then set approved: true. Unapproved drafts are ignored by run_evals.py.
+- id: gen-p9-0
+  category: paraphrased
+  generated: true
+  approved: false
+  turns:
+  - What does it mean to listen properly to someone, and why does that matter more for a counsellor than for ordinary
+    conversations with family or colleagues?
+  expected_behaviour: The reply explains that real listening means setting aside judgement and the urge to interrupt
+    so you grasp what is actually said rather than assumed, and that counsellors are paid to listen so they must
+    be especially skilled to understand the nuances of a client's problem.
+  key_points:
+  - Suspend judgement so you hear what is said, not what you presume
+  - Hold back unnecessary interjections to give the other room to speak
+  - The same listening elements occur in family, work, social and counselling encounters
+  - Counsellors are paid to listen, so need to be very good at it to grasp the nuances of the client's problem
+  expected_pages:
+  - 9
+- id: gen-p6-3447
+  category: paraphrased
+  generated: true
+  approved: false
+  turns:
+  - Some modern theorists say people have many selves rather than one fixed identity. If so, how do they explain
+    what we usually think of as a person's central, core self?
+  expected_behaviour: Explains that postmodern views treat the apparent core self not as a substance or essence
+    but as a process that organises the experiences of the multiple selves.
+  key_points:
+  - There are multiple selves rather than a single one
+  - The so-called core self is mistaken as a substance or essence
+  - It is better understood as a process
+  - That process organises the experiences of the multiple selves
+  expected_pages:
+  - 6
+- id: gen-p17-0
+  category: paraphrased
+  generated: true
+  approved: false
+  turns:
+  - What do you need in place for hope to work as a way of actively pursuing what you want in the future, and what
+    happens to that hope if you lack one of those ingredients?
+  expected_behaviour: Explains that goal-focused hope requires clear goals, multiple pathways to reach them, and
+    motivation to pursue them, and that missing any one of these limits hope.
+  key_points:
+  - Goal-focused hope involves setting clear goals
+  - It requires developing a range of routes or pathways to the goals
+  - It also requires motivation to achieve the goals
+  - If any one of the three elements is missing, hope is limited
+  expected_pages:
+  - 17

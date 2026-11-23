@@ -33,7 +33,7 @@ from langgraph.types import Command
 
 import step7_agent
 from bot_config import BotConfig, load_bot
-from guardrails import (CRISIS_REPLY, INJECTION_REPLY, amark_as_data, leaks, make_input_check,
+from guardrails import (CRISIS_REPLY, amark_as_data, injection_reply, leaks, make_input_check,
                         mark_as_data, new_canary, with_canary)
 from step4_agent import ask_human, print_update
 from step5_agent import CHECKPOINT_DB, list_threads, thread_config
@@ -59,7 +59,8 @@ def build_graph(bot: BotConfig, tools: list, llm, checkpointer, guard_llm=None):
     # Compiled without a checkpointer: as a subgraph it uses the parent's, so an
     # approval pause inside it is saved and resumed like any other.
     assistant = step7_agent.build_graph(hardened_bot, tools, llm, None, tool_node=tool_node)
-    check_input = make_input_check(guard_llm or llm) if llm is not None else None
+    check_input = make_input_check(guard_llm or llm, bot) if llm is not None else None
+    refusal = injection_reply(bot)
 
     async def guard_input(state: State):
         question = state["messages"][-1].text
@@ -69,14 +70,14 @@ def build_graph(bot: BotConfig, tools: list, llm, checkpointer, guard_llm=None):
                                              "messages": [AIMessage(CRISIS_REPLY)]})
         if category == "injection":
             return Command(goto=END, update={"guard": f"injection: {reason}",
-                                             "messages": [AIMessage(INJECTION_REPLY)]})
+                                             "messages": [AIMessage(refusal)]})
         return Command(goto="assistant", update={"guard": "ok"})
 
     def guard_output(state: State):
         answer = state["messages"][-1]
         if isinstance(answer, AIMessage) and leaks(answer.text, canary):
             return {"guard": "output blocked: system prompt leak",
-                    "messages": [RemoveMessage(id=answer.id), AIMessage(INJECTION_REPLY)]}
+                    "messages": [RemoveMessage(id=answer.id), AIMessage(refusal)]}
         return {}
 
     builder = StateGraph(State)
@@ -154,7 +155,7 @@ async def main():
         if args.list:
             await list_threads(checkpointer, bot)
             return
-        tools = await load_tools(bot.tools)
+        tools = await load_tools(bot.tools, bot)
         if args.graph:
             print(build_graph(bot, tools, None, checkpointer).get_graph(xray=1).draw_mermaid())
             return

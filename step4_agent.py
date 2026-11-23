@@ -145,7 +145,7 @@ async def main():
     args = parser.parse_args()
 
     bot = load_bot(args.bot)
-    tools = await load_tools(bot.tools)
+    tools = await load_tools(bot.tools, bot)
 
     if args.graph:
         print(build_graph(bot, tools, llm=None).get_graph().draw_mermaid())

@@ -50,9 +50,9 @@ RECURSION_LIMIT = 12
 COMPACT_ABOVE_TOKENS = 4000  # approximate size of the message history
 KEEP_LAST_TURNS = 2  # the current question plus the previous turn stay verbatim
 
-SUMMARY_PROMPT = """You maintain a running summary of a conversation between a student and a study assistant.
+SUMMARY_PROMPT = """You maintain a running summary of a conversation between a user and an assistant.
 Merge the existing summary with the new part of the conversation into one concise summary.
-Keep what the student asked, the key points of the answers with their page citations, and any preferences the student stated.
+Keep what the user asked, the key points of the answers with their citations, and any preferences the user stated.
 Do not copy long passages. Write plain prose, at most 200 words."""
 
 
@@ -206,7 +206,7 @@ async def main():
         if args.list:
             await list_threads(checkpointer, bot)
             return
-        tools = await load_tools(bot.tools)
+        tools = await load_tools(bot.tools, bot)
         if args.graph:
             print(build_graph(bot, tools, None, checkpointer).get_graph().draw_mermaid())
             return

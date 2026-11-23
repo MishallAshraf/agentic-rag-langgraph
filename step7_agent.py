@@ -45,10 +45,10 @@ from step5_agent import CHECKPOINT_DB, list_threads, make_compact, thread_config
 from tool_registry import load_tools
 
 DEFAULT_BOT = "bots/study_assistant.yaml"
-SOURCE_TOOLS = {"search_course_material", "search_documents", "read_page"}
+SOURCE_TOOLS = {"search_course_material", "search_knowledge", "search_documents", "read_page"}
 MAX_REVISIONS = 1  # one retry after a failed fact check, then accept the answer
 
-CHECKER_PROMPT = """You fact-check a study assistant's answer before the student sees it.
+CHECKER_PROMPT = """You fact-check an assistant's answer before the user sees it.
 You get the sources the assistant retrieved and its answer.
 The answer is supported only if every factual claim in it appears in the sources and each page citation points to a source that contains the claim.
 Saying that the material does not cover something is always allowed.
@@ -118,7 +118,7 @@ def build_graph(bot: BotConfig, tools: list, llm, checkpointer, tool_node=None):
         ])
         if verdict.supported:
             return Command(goto=END, update={"feedback": ""})
-        # Remove the failed answer so it never reaches the student or the history.
+        # Remove the failed answer so it never reaches the user or the history.
         return Command(goto="agent", update={
             "messages": [RemoveMessage(id=answer.id)],
             "feedback": verdict.problems,
@@ -191,7 +191,7 @@ async def main():
         if args.list:
             await list_threads(checkpointer, bot)
             return
-        tools = await load_tools(bot.tools)
+        tools = await load_tools(bot.tools, bot)
         if args.graph:
             print("%% Agent graph")
             print(build_graph(bot, tools, None, checkpointer).get_graph().draw_mermaid())

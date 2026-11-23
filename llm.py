@@ -8,6 +8,7 @@ then just a different model name - no code or package change.
 Settings come from the .env file (see .env.example):
     OPENROUTER_API_KEY   required
     OPENROUTER_MODEL     optional, defaults to DEFAULT_MODEL
+    OPENROUTER_FALLBACK_MODELS  optional, comma-separated; "none" turns fallback off
 """
 
 import os
@@ -17,6 +18,11 @@ from langchain_openai import ChatOpenAI
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = "anthropic/claude-haiku-5.5"
+MAX_OUTPUT_TOKENS = 2000
+# Tried in order if the main model fails (Step 9). OpenRouter already retries
+# other PROVIDERS of the same model; this covers the model itself being down.
+# A different vendor, so one company's outage cannot take out both.
+DEFAULT_FALLBACK_MODELS = "openai/gpt-4o-mini"
 
 load_dotenv()
 
@@ -27,9 +33,17 @@ def get_llm(temperature: float = 0, model: str | None = None) -> ChatOpenAI:
         raise SystemExit(
             "OPENROUTER_API_KEY is not set. Copy .env.example to .env and put your key in it."
         )
+    # An explicit model wins (the eval judge uses a stronger one), then .env, then the default.
+    model = model or os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL)
+    fallbacks = os.getenv("OPENROUTER_FALLBACK_MODELS", DEFAULT_FALLBACK_MODELS)
+    if fallbacks.strip().lower() == "none":
+        fallbacks = []
+    else:
+        fallbacks = [m.strip() for m in fallbacks.split(",") if m.strip() and m.strip() != model]
     return ChatOpenAI(
-        # An explicit model wins (the eval judge uses a stronger one), then .env, then the default.
-        model=model or os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL),
+        model=model,
+        # OpenRouter's "models" list: the first is tried first, the rest on failure.
+        extra_body={"models": [model, *fallbacks]} if fallbacks else None,
         base_url=OPENROUTER_BASE_URL,
         api_key=api_key,
         temperature=temperature,
@@ -38,6 +52,10 @@ def get_llm(temperature: float = 0, model: str | None = None) -> ChatOpenAI:
         # 60 s and retry twice instead.
         timeout=60,
         max_retries=2,
+        # A ceiling on each reply. Without it OpenRouter reserves credit for the
+        # model's full output limit (64k tokens) on every call, and a low balance
+        # refuses parallel calls (Step 9). The longest answers here are ~800 tokens.
+        max_tokens=MAX_OUTPUT_TOKENS,
         # Ask for token counts on streamed responses too, so we can show them.
         stream_usage=True,
     )

@@ -25,6 +25,7 @@ JUDGE_MODEL = os.getenv("EVAL_JUDGE_MODEL", "anthropic/claude-sonnet-5.5")
 PRICES = {
     "anthropic/claude-haiku-5.5": (0.10, 0.50),
     "anthropic/claude-sonnet-5.5": (2.00, 10.00),
+    "openai/gpt-4o-mini": (0.15, 0.60),  # the fallback model
 }
 
 

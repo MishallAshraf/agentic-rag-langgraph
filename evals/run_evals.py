@@ -223,7 +223,7 @@ def summarise(result, cases_by_id, label, args):
                      "comments": {e.name: e.comment for e in r.evaluations if e.comment}})
     return {
         "label": label, "created": datetime.now().isoformat(timespec="seconds"),
-        "settings": {"model": os.getenv("OPENROUTER_MODEL", "default"), "judge": JUDGE_MODEL,
+        "settings": {"agent": args.agent, "model": os.getenv("OPENROUTER_MODEL", "default"), "judge": JUDGE_MODEL,
                      "verify_answers": not args.no_verify, "retrieval_mode": args.retrieval_mode},
         "experiment_id": result.experiment_id if langfuse_enabled() else None,
         "averages": {e.name.removeprefix("avg_"): e.value for e in result.run_evaluations},
@@ -276,6 +276,8 @@ def main():
     parser.add_argument("--limit", type=int)
     parser.add_argument("--no-verify", action="store_true", help="turn off the Step 7 fact check")
     parser.add_argument("--model", help="agent model on OpenRouter (the judge stays the same)")
+    parser.add_argument("--agent", default="step9", choices=["step7", "step9"],
+                        help="step9 adds the guardrails; step7 is the agent without them")
     parser.add_argument("--retrieval-mode", default="rerank", choices=["vector", "keyword", "hybrid", "rerank"])
     parser.add_argument("--concurrency", type=int, default=3)
     parser.add_argument("--gate", action="store_true", help="exit 1 if quality is below the gate")
@@ -289,11 +291,13 @@ def main():
     from bot_config import load_bot
     from judge import make_judge
     from llm import get_llm
-    from step7_agent import DEFAULT_BOT, build_graph
+    from step7_agent import DEFAULT_BOT
+    build_graph = __import__(f"{args.agent}_agent").build_graph
     from tool_registry import load_tools
 
     retrieval_module.DEFAULT_MODE = args.retrieval_mode
     search_graph.VERBOSE = False
+    search_graph.CACHE_ENABLED = False  # each case must do its own search
     retrieval_module.get_retriever().search("warm up", k=1)  # load models once, before the threads start
 
     cases = load_cases()
@@ -317,7 +321,7 @@ def main():
 
     experiment = dict(
         name="study-assistant", run_name=label,
-        description=f"model={os.getenv('OPENROUTER_MODEL', 'default')} verify={not args.no_verify} "
+        description=f"agent={args.agent} model={os.getenv('OPENROUTER_MODEL', 'default')} verify={not args.no_verify} "
                     f"retrieval={args.retrieval_mode}",
         task=make_task(graph, langfuse_on),
         evaluators=[retrieval, deterministic, make_judge_evaluator(make_judge(get_judge_llm())),

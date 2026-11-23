@@ -14,8 +14,8 @@ Each step builds on the previous one and maps to topics from the "Mastering AI s
 | 6 | Done | Better retrieval | Hybrid search; reranking; HNSW settings; parsing PDFs, tables, OCR |
 | 7 | Done | Agentic RAG: grade results, rewrite the query, retry, cite sources | Agentic RAG; context engineering |
 | 8 | Done | Evaluation harness and tracing | Golden datasets; synthetic data; LLM-as-judge; agent trajectory evaluation; tracing |
-| 9 | Next | Hardening | Timeouts, retries, fallbacks; semantic and prompt caching; cost modelling; guardrails; prompt injection |
-| 10 | | Bot builder: configuration schema, builder agent, one document collection per bot, automatic evaluation of generated bots | Structured outputs; context engineering; multi-tenancy; evals for generated bots |
+| 9 | Done | Hardening | Timeouts, retries, fallbacks; semantic and prompt caching; cost modelling; guardrails; prompt injection |
+| 10 | Next | Bot builder: configuration schema, builder agent, one document collection per bot, automatic evaluation of generated bots | Structured outputs; context engineering; multi-tenancy; evals for generated bots |
 | 11 | | Backend API (FastAPI, streaming over Server-Sent Events) | API design; streaming; rate limiting; latency budgets |
 | 12 | | React frontend (Vite, React, TypeScript), themed per bot | Streaming UX; showing sources and agent steps; human approval UI |
 | 13 | | Authentication and authorization, per user and per bot | Retrieval access control; per-tenant quotas; audit logging |

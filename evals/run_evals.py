@@ -28,10 +28,11 @@ import json
 import os
 import re
 import time
+from pathlib import Path
 import uuid
 from datetime import datetime
 
-from common import (DATASET_NAME, JUDGE_MODEL, RESULTS_DIR, cost_usd, get_judge_llm, get_langfuse,
+from common import (JUDGE_MODEL, dataset_name, RESULTS_DIR, cost_usd, get_judge_llm, get_langfuse,
                     langfuse_enabled, load_cases, to_item)
 
 from langchain_core.callbacks import UsageMetadataCallbackHandler  # noqa: E402
@@ -41,6 +42,9 @@ from langgraph.checkpoint.memory import InMemorySaver  # noqa: E402
 from langgraph.types import Command  # noqa: E402
 
 PAGE_PATTERN = re.compile(r"^(?:\[\d+\] )?[\w .-]+\.pdf, page (\d+)", re.MULTILINE)
+# Step 10: any source label, e.g. '[2] 0010-hybrid.md, section "Decision"'.
+SOURCE_PATTERN = re.compile(r"^\[\d+\] (.+)$", re.MULTILINE)
+SOURCE_TOOLS = {"search_course_material", "search_knowledge", "read_page", "search_documents"}
 
 # Quality gate: --gate fails the run when an average drops below these.
 GATE = {"judge_correct": 0.80, "judge_faithful": 0.85, "trajectory": 0.90, "page_hit": 0.85}
@@ -97,14 +101,14 @@ def make_task(graph, langfuse_on: bool):
         last_question = max(i for i, m in enumerate(messages) if isinstance(m, HumanMessage))
         turn = messages[last_question:]
         tool_messages = [m for m in turn if isinstance(m, ToolMessage)]
-        sources = [m.text for m in tool_messages if m.name in {"search_course_material", "read_page",
-                                                                 "search_documents"}]
+        sources = [m.text for m in tool_messages if m.name in SOURCE_TOOLS]
         tokens = {model: {k: u[k] for k in ("input_tokens", "output_tokens")}
                   for model, u in usage.usage_metadata.items()}
         return {
             "answer": messages[-1].text,
             "tool_calls": [c["name"] for m in turn if isinstance(m, AIMessage) for c in m.tool_calls],
             "retrieved_pages": sorted({int(p) for s in sources for p in PAGE_PATTERN.findall(s)}),
+            "retrieved_sources": sorted({src.strip() for s in sources for src in SOURCE_PATTERN.findall(s)}),
             "sources": sources,
             "approval_asked": approval_asked,
             "revisions": state.get("revisions", 0),
@@ -119,6 +123,11 @@ def make_task(graph, langfuse_on: bool):
 # ------------------------------------------------------------------ item evaluators
 
 def retrieval(*, output, expected_output, **_):
+    sources = set(expected_output.get("expected_sources") or [])
+    if sources and not output.get("error"):  # Step 10: Markdown bots cite sections, not pages
+        found = set(output.get("retrieved_sources", []))
+        return [Evaluation(name="source_hit", value=float(bool(sources & found)),
+                           comment=f"expected {sorted(sources)}, retrieved {sorted(found)}")]
     expected = set(expected_output.get("expected_pages") or [])
     if not expected or output.get("error"):
         return []  # nothing to find (off-topic, not covered) - not scored
@@ -204,12 +213,12 @@ def averages(*, item_results, **_):
 
 # ------------------------------------------------------------------ main
 
-def sync_dataset(langfuse, cases):
+def sync_dataset(langfuse, cases, name, description):
     """Upsert the cases into the Langfuse dataset; the case id is the item id."""
-    langfuse.create_dataset(name=DATASET_NAME, description="Golden questions for the Counselling Study Assistant")
+    langfuse.create_dataset(name=name, description=description)
     for case in cases:
         item = to_item(case)
-        langfuse.create_dataset_item(dataset_name=DATASET_NAME, id=item["id"], input=item["input"],
+        langfuse.create_dataset_item(dataset_name=name, id=item["id"], input=item["input"],
                                      expected_output=item["expected_output"], metadata=item["metadata"])
 
 
@@ -223,7 +232,7 @@ def summarise(result, cases_by_id, label, args):
                      "comments": {e.name: e.comment for e in r.evaluations if e.comment}})
     return {
         "label": label, "created": datetime.now().isoformat(timespec="seconds"),
-        "settings": {"agent": args.agent, "model": os.getenv("OPENROUTER_MODEL", "default"), "judge": JUDGE_MODEL,
+        "settings": {"bot": args.bot_id, "agent": args.agent, "model": os.getenv("OPENROUTER_MODEL", "default"), "judge": JUDGE_MODEL,
                      "verify_answers": not args.no_verify, "retrieval_mode": args.retrieval_mode},
         "experiment_id": result.experiment_id if langfuse_enabled() else None,
         "averages": {e.name.removeprefix("avg_"): e.value for e in result.run_evaluations},
@@ -238,7 +247,7 @@ def print_report(summary, previous):
         fmt = lambda k: "  -  " if k not in s else (" yes " if s[k] == 1 else "  NO ")  # noqa: E731
         cost = row["output"].get("cost_usd")
         print(f"{row['id']:34} {row['category']:15} {fmt('judge_correct')}   {fmt('judge_faithful')}   "
-              f"{fmt('trajectory')}   {fmt('page_hit')} {'-' if cost is None else f'{cost:.4f}':>7} "
+              f"{fmt('trajectory')}   {fmt('page_hit' if 'page_hit' in s else 'source_hit')} {'-' if cost is None else f'{cost:.4f}':>7} "
               f"{row['output']['seconds']:6.1f}")
         for name, comment in row["comments"].items():
             if s.get(name) == 0:
@@ -280,6 +289,8 @@ def main():
                         help="step9 adds the guardrails; step7 is the agent without them")
     parser.add_argument("--retrieval-mode", default="rerank", choices=["vector", "keyword", "hybrid", "rerank"])
     parser.add_argument("--concurrency", type=int, default=3)
+    parser.add_argument("--bot", default="bots/study_assistant.yaml", help="the bot to evaluate")
+    parser.add_argument("--dataset", help="its test cases (default: evals/golden.yaml)")
     parser.add_argument("--gate", action="store_true", help="exit 1 if quality is below the gate")
     args = parser.parse_args()
 
@@ -291,16 +302,19 @@ def main():
     from bot_config import load_bot
     from judge import make_judge
     from llm import get_llm
-    from step7_agent import DEFAULT_BOT
     build_graph = __import__(f"{args.agent}_agent").build_graph
     from tool_registry import load_tools
 
     retrieval_module.DEFAULT_MODE = args.retrieval_mode
     search_graph.VERBOSE = False
     search_graph.CACHE_ENABLED = False  # each case must do its own search
-    retrieval_module.get_retriever().search("warm up", k=1)  # load models once, before the threads start
+    bot = load_bot(args.bot)
+    args.bot_id = bot.id
+    if bot.knowledge:  # load models and the index once, before the threads start
+        retrieval_module.get_retriever(bot.knowledge.collection).search("warm up", k=1)
+    dataset_file = Path(args.dataset) if args.dataset else None
 
-    cases = load_cases()
+    cases = load_cases(dataset=dataset_file)
     if args.only:
         wanted = args.only.split(",")
         cases = [c for c in cases if c["id"] in wanted]
@@ -310,28 +324,29 @@ def main():
         raise SystemExit("No cases selected.")
     cases_by_id = {c["id"]: c for c in cases}
 
-    bot = load_bot(DEFAULT_BOT)
     if args.no_verify:
         bot = bot.model_copy(update={"verify_answers": False})
-    tools = asyncio.run(load_tools(bot.tools))
+    tools = asyncio.run(load_tools(bot.tools, bot))
     graph = build_graph(bot, tools, get_llm(), InMemorySaver())
     langfuse = get_langfuse()
     langfuse_on = langfuse_enabled()
     label = f"{args.label}-{datetime.now():%Y%m%d-%H%M%S}"
 
     experiment = dict(
-        name="study-assistant", run_name=label,
+        name=bot.id.replace("_", "-"), run_name=label,
         description=f"agent={args.agent} model={os.getenv('OPENROUTER_MODEL', 'default')} verify={not args.no_verify} "
                     f"retrieval={args.retrieval_mode}",
         task=make_task(graph, langfuse_on),
-        evaluators=[retrieval, deterministic, make_judge_evaluator(make_judge(get_judge_llm())),
+        evaluators=[retrieval, deterministic, make_judge_evaluator(make_judge(get_judge_llm(), bot)),
                     cost_and_latency],
         run_evaluators=[averages], max_concurrency=args.concurrency,
     )
     print(f"Running {len(cases)} cases (judge: {JUDGE_MODEL}, Langfuse: {'on' if langfuse_on else 'off'})...")
     if langfuse_on:
-        sync_dataset(langfuse, load_cases())  # always the full dataset, whatever --only selects
-        dataset = langfuse.get_dataset(DATASET_NAME)
+        name = dataset_name(bot.id)
+        # Always the full dataset, whatever --only selects.
+        sync_dataset(langfuse, load_cases(dataset=dataset_file), name, f"Test cases for {bot.name}")
+        dataset = langfuse.get_dataset(name)
         selected = set(cases_by_id)
         dataset.items = [i for i in dataset.items if i.id in selected]
         result = dataset.run_experiment(**experiment)
@@ -343,7 +358,8 @@ def main():
     previous = None
     for path in sorted(RESULTS_DIR.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True):
         run = json.loads(path.read_text(encoding="utf-8"))
-        if {c["id"] for c in run["cases"]} == set(cases_by_id):
+        same_bot = run.get("settings", {}).get("bot", "study_assistant") == bot.id
+        if same_bot and {c["id"] for c in run["cases"]} == set(cases_by_id):
             previous = run
             break
     summary = summarise(result, cases_by_id, label, args)

@@ -18,6 +18,11 @@ GOLDEN_FILE = EVALS_DIR / "golden.yaml"
 CANDIDATES_FILE = EVALS_DIR / "candidates.yaml"
 
 DATASET_NAME = "study-assistant-golden"
+
+
+def dataset_name(bot_id: str) -> str:
+    """The Langfuse dataset for a bot: one per bot, so their results never mix."""
+    return DATASET_NAME if bot_id == "study_assistant" else f"{bot_id.replace('_', '-')}-golden"
 # A stronger model than the agent's, so the judge does not share the agent's blind spots.
 JUDGE_MODEL = os.getenv("EVAL_JUDGE_MODEL", "anthropic/claude-sonnet-5.5")
 
@@ -40,10 +45,13 @@ def cost_usd(usage_by_model: dict) -> float | None:
     return total
 
 
-def load_cases(include_candidates: bool = True) -> list[dict]:
-    """Hand-written cases, plus generated candidates a human has approved."""
-    cases = yaml.safe_load(GOLDEN_FILE.read_text(encoding="utf-8"))
-    if include_candidates and CANDIDATES_FILE.exists():
+def load_cases(include_candidates: bool = True, dataset: Path | None = None) -> list[dict]:
+    """Hand-written cases, plus generated candidates a human has approved.
+
+    With dataset: that file only (Step 10: each generated bot has its own).
+    """
+    cases = yaml.safe_load((dataset or GOLDEN_FILE).read_text(encoding="utf-8"))
+    if dataset is None and include_candidates and CANDIDATES_FILE.exists():
         candidates = yaml.safe_load(CANDIDATES_FILE.read_text(encoding="utf-8")) or []
         cases += [c for c in candidates if c.get("approved")]
     ids = [c["id"] for c in cases]
@@ -62,6 +70,7 @@ def to_item(case: dict) -> dict:
             "expected_behaviour": case.get("expected_behaviour", ""),
             "key_points": case.get("key_points", []),
             "expected_pages": case.get("expected_pages", []),
+            "expected_sources": case.get("expected_sources", []),
             "must_not_say": case.get("must_not_say", []),
         },
         "metadata": {

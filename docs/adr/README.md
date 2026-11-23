@@ -16,6 +16,8 @@ An ADR records one significant decision: the context, what was decided, the alte
 | [0010](0010-hybrid-retrieval-with-reranking.md) | Cleaner parsing, hybrid retrieval and reranking; keep Chroma | Accepted |
 | [0011](0011-graded-retrieval-and-answer-checking.md) | Graded retrieval inside a tool, and a fact check on final answers | Accepted |
 | [0012](0012-evaluation-harness-with-langfuse.md) | Evaluation harness: golden dataset, layered scoring, Langfuse Cloud, a stronger judge | Accepted |
+| [0013](0013-guardrails-around-the-agent.md) | Guardrails around the agent: input check, tool output as data, canary | Accepted |
+| [0014](0014-reliability-cost-and-caching.md) | Reliability and cost limits; an exact cache instead of a semantic one | Accepted |
 
 Statuses: **Proposed** (under discussion), **Accepted**, **Superseded by NNNN** (replaced by a later decision; the old record is kept, not edited).
 

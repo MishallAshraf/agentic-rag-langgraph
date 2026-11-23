@@ -72,7 +72,8 @@ def current_turn(messages):
     return messages[last_question:]
 
 
-def build_graph(bot: BotConfig, tools: list, llm, checkpointer):
+def build_graph(bot: BotConfig, tools: list, llm, checkpointer, tool_node=None):
+    # tool_node: Step 9 passes a ToolNode that marks tool output as data.
     llm_with_tools = llm.bind_tools(tools) if llm is not None else None
     checker = llm.with_structured_output(Verdict, method="function_calling") if llm else None
     compact = make_compact(llm)
@@ -136,7 +137,7 @@ def build_graph(bot: BotConfig, tools: list, llm, checkpointer):
     builder = StateGraph(State)
     builder.add_node("start_turn", start_turn)
     builder.add_node("agent", agent)
-    builder.add_node("tools", ToolNode(tools))
+    builder.add_node("tools", tool_node or ToolNode(tools))
     builder.add_node("human_approval", human_approval, destinations=("tools", "agent"))
     builder.add_node("check_answer", check_answer, destinations=("agent", END))
     builder.add_edge(START, "start_turn")

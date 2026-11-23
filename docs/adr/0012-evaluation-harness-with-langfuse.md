@@ -53,9 +53,23 @@ Baseline over 22 cases (`claude-haiku-5.5` agent, fact check on, rerank retrieva
 | trajectory, citations_valid, approval_respected, no_forbidden_text | 1.000 |
 | agent cost per case / latency per case | about USD 0.001 / 9.3 s |
 
-Comparison runs (fact check off; keyword-only retrieval) are pending. They were attempted, but the OpenRouter credit ran out mid-run (HTTP 402), so the judge scored only about half the cases. The harness flagged every missing judgement, and half-judged averages are not reported here.
+Comparison runs over the same 22 cases (each changes one setting from the baseline):
 
-Two operational defects came out of those attempts:
+| Score | Baseline (rerank, fact check on) | Fact check off | Keyword retrieval |
+|---|---|---|---|
+| judge_correct | 0.955 | 0.955 | 0.955 |
+| judge_faithful | 1.000 | 0.909 | 0.909 |
+| page_hit / page_recall | 0.941 / 0.941 | 0.941 / 0.941 | 0.941 / 0.922 |
+| no_forbidden_text | 1.000 | 1.000 | 0.955 |
+| latency per case | 9.3 s | 7.7 s | 8.0 s |
+| failing cases | hope-predicts-progress | hope-predicts-progress (incorrect); frank-vs-lambert, similar-outcomes-paraphrase (unfaithful) | relationship-importance (incorrect); emdr, similar-outcomes-paraphrase (unfaithful) |
+
+- **The fact check earns its cost.** Without it, 2 of 22 answers contained claims beyond the sources: one-to-one mappings between Frank's and Lambert's lists that the text never makes, and "common factors matter more than the differences". It costs about 1.5 s per answer, and the cost per case barely moves.
+- **Same averages, different failures.** Keyword retrieval found page 4 for the hope question (the word "hope" matches exactly) but missed page 15 for "how much does the relationship matter?". Correctness averages are identical, but the failing cases changed. Compare runs case by case, not only by their averages.
+- **The offline evaluation caught what the runtime check missed.** In the keyword run, the EMDR answer claimed a passage "mentions" EMDR (none does) and added "eye movements or bilateral stimulation" from general knowledge. The Step 7 fact checker passed it; the judge and the forbidden-text rule both flagged it.
+- **Cost per full run:** about USD 0.08 (agent and Sonnet judge together, measured from the OpenRouter balance), much less than estimated.
+
+Two operational defects came out of the first attempts at these runs, which hung and then ran out of credit:
 - `get_llm()` had no request timeout, and one run hung for over an hour on a request that never returned. It now has 60 s with two retries.
 - The judge sent no `max_tokens`, so OpenRouter reserved credit for 65,536 output tokens (about USD 0.65 on Sonnet) on every call. The cap is now 2,000.
 
@@ -70,7 +84,7 @@ Building the harness found four defects that hand-testing had missed:
 ## Consequences
 
 - Every later change (Step 9 guardrails, caching, the model choice) can be measured against the same dataset before it is accepted, and the gate can run in CI.
-- A run costs real money for the judge: roughly USD 0.20 for 22 cases on Sonnet (an estimate: the judge's tokens are not counted by the harness yet), against about USD 0.03 for the agent. Ablations multiply that.
+- A run costs real money for the judge: about USD 0.08 for a full 22-case run, agent and judge together (measured from the OpenRouter balance; the harness counts only the agent's tokens). Ablations multiply that.
 - Twenty-two cases are enough to find big regressions, but not small ones: one case is 4.5 percentage points. The dataset should grow through approved candidates, and differences of one or two cases should be read as noise.
 - The judge stays unverified until a human grades a sample in the review queue and `calibrate.py` shows acceptable agreement.
 - Traces and inputs go to Langfuse Cloud (EU region). That is fine for course questions, but must be revisited before any real user data flows through (Step 13).

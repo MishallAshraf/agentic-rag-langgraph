@@ -1,0 +1,99 @@
+"""Step 6b - Better retrieval: hybrid search plus reranking.
+
+Four ways to find chunks, each building on the last:
+
+  vector   meaning-based: embed the query, find the nearest chunk vectors.
+           Good at paraphrases ("why do therapies give similar results?").
+  keyword  BM25: scores chunks by shared words, weighting rare words higher.
+           Good at exact terms and names ("Dodo bird", "Lambert", "89").
+  hybrid   runs both and merges the two rankings with Reciprocal Rank Fusion.
+  rerank   takes the hybrid top 10 and re-scores each (query, chunk) pair with
+           a cross-encoder, a small model that reads both texts together.
+
+Why rerank at all? The embedding model encodes the query and each chunk
+SEPARATELY, so it cannot compare them word by word. A cross-encoder reads them
+together, which is far more accurate but too slow to run on every chunk -
+hence: cheap search for 10 candidates, expensive scoring for those 10 only.
+"""
+
+import re
+
+from fastembed.rerank.cross_encoder import TextCrossEncoder
+from langchain_core.documents import Document
+from rank_bm25 import BM25Okapi
+
+from vectorstore import get_vectorstore
+
+CLEAN_COLLECTION = "documents_clean"
+# How many results each method contributes before fusion or reranking. Measured
+# with step6_compare.py: 10 gave the same quality as 20 at half the rerank time.
+CANDIDATES = 10
+RRF_K = 60  # standard RRF constant: dampens the gap between rank 1 and rank 2
+RERANK_MODEL = "Xenova/ms-marco-MiniLM-L-6-v2"  # ~80 MB, CPU-friendly
+BODY_ONLY = {"section": "body"}  # metadata filter: skip reference lists
+
+STOPWORDS = set(
+    "a an and are as at be by can do does for from how in is it of on or that the "
+    "this to was what when which who why will with you your".split()
+)
+
+
+def tokenize(text: str) -> list[str]:
+    return [w for w in re.findall(r"[a-z0-9]+", text.lower()) if w not in STOPWORDS]
+
+
+class Retriever:
+    def __init__(self, collection: str = CLEAN_COLLECTION):
+        self.store = get_vectorstore(collection)
+        # BM25 keeps its own index in memory, built from the same chunks.
+        data = self.store.get(where=BODY_ONLY, include=["documents", "metadatas"])
+        if not data["ids"]:
+            raise SystemExit(f"Collection '{collection}' is empty. Run: python step6_ingest.py")
+        self.docs = [
+            Document(page_content=text, metadata=meta, id=doc_id)
+            for doc_id, text, meta in zip(data["ids"], data["documents"], data["metadatas"])
+        ]
+        self.bm25 = BM25Okapi([tokenize(d.page_content) for d in self.docs])
+        self._reranker = None
+
+    def vector(self, query: str, k: int) -> list[Document]:
+        return self.store.similarity_search(query, k=k, filter=BODY_ONLY)
+
+    def keyword(self, query: str, k: int) -> list[Document]:
+        scores = self.bm25.get_scores(tokenize(query))
+        best = sorted(range(len(self.docs)), key=lambda i: scores[i], reverse=True)[:k]
+        return [self.docs[i] for i in best if scores[i] > 0]
+
+    def hybrid(self, query: str, k: int) -> list[Document]:
+        # Reciprocal Rank Fusion: each method votes 1/(RRF_K + rank) for each
+        # chunk it returned. Uses only ranks, so the two methods' very
+        # different score scales never need to be compared.
+        votes, by_id = {}, {}
+        for results in (self.vector(query, CANDIDATES), self.keyword(query, CANDIDATES)):
+            for rank, doc in enumerate(results, start=1):
+                votes[doc.id] = votes.get(doc.id, 0) + 1 / (RRF_K + rank)
+                by_id[doc.id] = doc
+        return [by_id[i] for i in sorted(votes, key=votes.get, reverse=True)[:k]]
+
+    def rerank(self, query: str, k: int) -> list[Document]:
+        candidates = self.hybrid(query, CANDIDATES)
+        if self._reranker is None:
+            self._reranker = TextCrossEncoder(RERANK_MODEL)
+        scores = list(self._reranker.rerank(query, [d.page_content for d in candidates]))
+        best = sorted(range(len(candidates)), key=lambda i: scores[i], reverse=True)[:k]
+        return [candidates[i] for i in best]
+
+    def search(self, query: str, k: int = 4, mode: str = "rerank") -> list[Document]:
+        return {"vector": self.vector, "keyword": self.keyword,
+                "hybrid": self.hybrid, "rerank": self.rerank}[mode](query, k)
+
+
+_retriever = None
+
+
+def get_retriever() -> Retriever:
+    """One shared Retriever: loading the models and BM25 index happens once."""
+    global _retriever
+    if _retriever is None:
+        _retriever = Retriever()
+    return _retriever

@@ -17,6 +17,7 @@ hence: cheap search for 10 candidates, expensive scoring for those 10 only.
 """
 
 import re
+import threading
 
 from fastembed.rerank.cross_encoder import TextCrossEncoder
 from langchain_core.documents import Document
@@ -31,6 +32,7 @@ CANDIDATES = 10
 RRF_K = 60  # standard RRF constant: dampens the gap between rank 1 and rank 2
 RERANK_MODEL = "Xenova/ms-marco-MiniLM-L-6-v2"  # ~80 MB, CPU-friendly
 BODY_ONLY = {"section": "body"}  # metadata filter: skip reference lists
+DEFAULT_MODE = "rerank"  # what search() uses unless told otherwise; evals can switch it
 
 STOPWORDS = set(
     "a an and are as at be by can do does for from how in is it of on or that the "
@@ -77,23 +79,29 @@ class Retriever:
 
     def rerank(self, query: str, k: int) -> list[Document]:
         candidates = self.hybrid(query, CANDIDATES)
-        if self._reranker is None:
-            self._reranker = TextCrossEncoder(RERANK_MODEL)
+        with _lock:  # loading the model twice at once, from two threads, fails
+            if self._reranker is None:
+                self._reranker = TextCrossEncoder(RERANK_MODEL)
         scores = list(self._reranker.rerank(query, [d.page_content for d in candidates]))
         best = sorted(range(len(candidates)), key=lambda i: scores[i], reverse=True)[:k]
         return [candidates[i] for i in best]
 
-    def search(self, query: str, k: int = 4, mode: str = "rerank") -> list[Document]:
+    def search(self, query: str, k: int = 4, mode: str | None = None) -> list[Document]:
         return {"vector": self.vector, "keyword": self.keyword,
-                "hybrid": self.hybrid, "rerank": self.rerank}[mode](query, k)
+                "hybrid": self.hybrid, "rerank": self.rerank}[mode or DEFAULT_MODE](query, k)
 
 
 _retriever = None
+# Searches can run in parallel threads (the agent's tools, the eval runner, later
+# the API). Without the lock, two threads can both see "not created yet" and
+# open the Chroma store at the same time, which Chroma rejects.
+_lock = threading.RLock()
 
 
 def get_retriever() -> Retriever:
     """One shared Retriever: loading the models and BM25 index happens once."""
     global _retriever
-    if _retriever is None:
-        _retriever = Retriever()
+    with _lock:
+        if _retriever is None:
+            _retriever = Retriever()
     return _retriever

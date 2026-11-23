@@ -1,0 +1,15 @@
+.env
+.venv/
+__pycache__/
+chroma_db/
+chunks/
+notes/
+data/
+chunks_clean/
+
+# Personal study notes, kept out of the repository
+docs/COURSE_NOTES.md
+
+# Source documents: check each document's licence before committing it
+documents/*
+!documents/.gitkeep

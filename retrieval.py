@@ -44,19 +44,35 @@ def tokenize(text: str) -> list[str]:
     return [w for w in re.findall(r"[a-z0-9]+", text.lower()) if w not in STOPWORDS]
 
 
+# Searches can run in parallel threads (the agent's tools, the eval runner, later
+# the API). Without the lock, two threads can both see "not created yet" and
+# open the Chroma store at the same time, which Chroma rejects.
+_lock = threading.RLock()
+_reranker = None
+
+
+def get_reranker() -> TextCrossEncoder:
+    """The cross-encoder is the same for every collection, so load it once for all."""
+    global _reranker
+    with _lock:  # loading the model twice at once, from two threads, fails
+        if _reranker is None:
+            _reranker = TextCrossEncoder(RERANK_MODEL)
+    return _reranker
+
+
 class Retriever:
     def __init__(self, collection: str = CLEAN_COLLECTION):
         self.store = get_vectorstore(collection)
         # BM25 keeps its own index in memory, built from the same chunks.
         data = self.store.get(where=BODY_ONLY, include=["documents", "metadatas"])
         if not data["ids"]:
-            raise SystemExit(f"Collection '{collection}' is empty. Run: python step6_ingest.py")
+            raise SystemExit(f"Collection '{collection}' is empty. Ingest its documents first "
+                             "(python step6_ingest.py, or python ingest.py bots/<bot>.yaml).")
         self.docs = [
             Document(page_content=text, metadata=meta, id=doc_id)
             for doc_id, text, meta in zip(data["ids"], data["documents"], data["metadatas"])
         ]
         self.bm25 = BM25Okapi([tokenize(d.page_content) for d in self.docs])
-        self._reranker = None
 
     def vector(self, query: str, k: int) -> list[Document]:
         return self.store.similarity_search(query, k=k, filter=BODY_ONLY)
@@ -79,10 +95,7 @@ class Retriever:
 
     def rerank(self, query: str, k: int) -> list[Document]:
         candidates = self.hybrid(query, CANDIDATES)
-        with _lock:  # loading the model twice at once, from two threads, fails
-            if self._reranker is None:
-                self._reranker = TextCrossEncoder(RERANK_MODEL)
-        scores = list(self._reranker.rerank(query, [d.page_content for d in candidates]))
+        scores = list(get_reranker().rerank(query, [d.page_content for d in candidates]))
         best = sorted(range(len(candidates)), key=lambda i: scores[i], reverse=True)[:k]
         return [candidates[i] for i in best]
 
@@ -91,17 +104,18 @@ class Retriever:
                 "hybrid": self.hybrid, "rerank": self.rerank}[mode or DEFAULT_MODE](query, k)
 
 
-_retriever = None
-# Searches can run in parallel threads (the agent's tools, the eval runner, later
-# the API). Without the lock, two threads can both see "not created yet" and
-# open the Chroma store at the same time, which Chroma rejects.
-_lock = threading.RLock()
+_retrievers: dict[str, Retriever] = {}
 
 
-def get_retriever() -> Retriever:
-    """One shared Retriever: loading the models and BM25 index happens once."""
-    global _retriever
+def get_retriever(collection: str = CLEAN_COLLECTION) -> Retriever:
+    """One Retriever per collection (Step 10: one collection per bot), built once."""
     with _lock:
-        if _retriever is None:
-            _retriever = Retriever()
-    return _retriever
+        if collection not in _retrievers:
+            _retrievers[collection] = Retriever(collection)
+    return _retrievers[collection]
+
+
+def forget_retriever(collection: str) -> None:
+    """Drop a cached Retriever, e.g. after its collection was re-ingested."""
+    with _lock:
+        _retrievers.pop(collection, None)

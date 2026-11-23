@@ -14,6 +14,16 @@ theme:
   primary_color: "#0F6E56"
   avatar: owl
 
+# Step 10: the bot's own documents and collection, and what it covers.
+knowledge:
+  folder: documents
+  collection: documents_clean
+  subject: the course material on counselling and psychotherapy
+topics:
+  - what counselling and counselling psychology are
+  - common and specific factors of change
+  - listening skills
+
 # Tool names from tool_registry.py. A bot can only pick registered tools.
 tools:
   - search_course_material   # Step 7: graded search that retries (was search_documents)

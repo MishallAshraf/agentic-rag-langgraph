@@ -9,10 +9,12 @@ So the docstring below is not just documentation - it IS the prompt that
 tells the model when and how to use the tool.
 """
 
+import re
 from pathlib import Path
 
 import pymupdf
-from langchain_core.tools import tool
+from langchain_core.tools import StructuredTool, tool
+from pydantic import BaseModel, Field
 
 from retrieval import get_retriever
 from step1_ingest import format_page
@@ -46,27 +48,38 @@ def search_documents(query: str) -> str:
     return "\n\n".join(passages)
 
 
-@tool
-def read_page(source: str, page: int) -> str:
-    """Read the full text of one page of a PDF in the course material.
+class ReadPageArgs(BaseModel):
+    source: str = Field(description='The file name, for example "Psychotherapy.pdf".')
+    page: int = Field(description="The page number, starting at 1.")
 
-    Use this when a passage from search_documents is cut off or you need the
-    surrounding context. Take source and page from the search results.
 
-    Args:
-        source: the file name, for example "Psychotherapy.pdf".
-        page: the page number, starting at 1.
-    """
-    # Model output is untrusted input: allow only a plain file name that exists
-    # in the documents folder, never a path such as "../.env".
-    path = DOCUMENTS_DIR / Path(source).name
-    if path.suffix.lower() != ".pdf" or not path.is_file():
-        return f"No PDF named '{source}' in the course material."
-    pdf = pymupdf.open(path)  # cleaner text than pypdf for this PDF (Step 6)
-    if not 1 <= page <= pdf.page_count:
-        return f"'{source}' has pages 1 to {pdf.page_count}."
-    text = " ".join(pdf[page - 1].get_text().split())
-    return f"{path.name}, page {page}\n{text}"
+def make_read_page(folder: Path, name: str = "read_page") -> StructuredTool:
+    """A read-page tool that can only open PDFs in one folder (Step 10: the bot's own)."""
+
+    def read(source: str, page: int) -> str:
+        # Model output is untrusted input: allow only a plain file name that exists
+        # in this folder (or below it), never a path such as "../.env".
+        name = Path(source).name
+        if not re.fullmatch(r"[\w .()-]+\.pdf", name, re.IGNORECASE):  # no glob characters like *
+            return f"No PDF named '{source}' in the documents."
+        matches = [f for f in folder.rglob(name) if f.is_file()]
+        if not matches:
+            return f"No PDF named '{source}' in the documents."
+        pdf = pymupdf.open(matches[0])  # cleaner text than pypdf for this PDF (Step 6)
+        if not 1 <= page <= pdf.page_count:
+            return f"'{source}' has pages 1 to {pdf.page_count}."
+        text = " ".join(pdf[page - 1].get_text().split())
+        return f"{matches[0].name}, page {page}\n{text}"
+
+    return StructuredTool.from_function(
+        func=read, name=name, args_schema=ReadPageArgs,
+        description=("Read the full text of one page of a PDF in the documents. Use this when a "
+                     "search passage is cut off or you need the surrounding context. Take source "
+                     "and page from the search results."))
+
+
+# The study assistant's tool, as before: PDFs in documents/.
+read_page = make_read_page(DOCUMENTS_DIR)
 
 
 # Step 3 uses only retrieval.

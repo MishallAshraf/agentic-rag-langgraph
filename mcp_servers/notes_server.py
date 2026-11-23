@@ -1,4 +1,4 @@
-"""An MCP server that lets an agent save and list study notes.
+"""An MCP server that lets an agent save and list notes.
 
 MCP (Model Context Protocol) is a standard way to offer tools to ANY agent,
 not just ours. This server is a separate program: the agent starts it, talks to
@@ -9,15 +9,18 @@ Run on its own (it then waits for an MCP client on stdin):
     python mcp_servers/notes_server.py
 """
 
+import os
 import re
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
-NOTES_DIR = Path(__file__).resolve().parent.parent / "notes"
+# Step 10: each bot gets its own folder, passed in by the tool registry. The
+# server never sees anything else of the parent's environment (no API keys).
+NOTES_DIR = Path(os.environ.get("NOTES_DIR") or Path(__file__).resolve().parent.parent / "notes")
 MAX_NOTE_CHARS = 5000
 
-mcp = FastMCP("study-notes", log_level="WARNING")
+mcp = FastMCP("notes", log_level="WARNING")
 
 
 def _slug(title: str) -> str:
@@ -29,7 +32,7 @@ def _slug(title: str) -> str:
 
 @mcp.tool()
 def save_note(title: str, content: str) -> str:
-    """Save a study note for the student as a Markdown file.
+    """Save a note for the user as a Markdown file.
 
     Args:
         title: a short title for the note.
@@ -37,15 +40,15 @@ def save_note(title: str, content: str) -> str:
     """
     if len(content) > MAX_NOTE_CHARS:
         return f"Note not saved: content is longer than {MAX_NOTE_CHARS} characters."
-    NOTES_DIR.mkdir(exist_ok=True)
+    NOTES_DIR.mkdir(parents=True, exist_ok=True)
     path = NOTES_DIR / f"{_slug(title)}.md"
     path.write_text(f"# {title}\n\n{content}\n", encoding="utf-8")
-    return f"Saved note '{title}' as notes/{path.name}"
+    return f"Saved note '{title}' as {path.name}"
 
 
 @mcp.tool()
 def list_notes() -> str:
-    """List the titles of the student's saved study notes."""
+    """List the titles of the user's saved notes."""
     files = sorted(NOTES_DIR.glob("*.md")) if NOTES_DIR.exists() else []
     if not files:
         return "No notes saved yet."

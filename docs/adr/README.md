@@ -15,6 +15,7 @@ An ADR records one significant decision: the context, what was decided, the alte
 | [0009](0009-sqlite-checkpoints-and-summary-compaction.md) | SQLite for conversation state, with summarise-and-trim compaction | Accepted |
 | [0010](0010-hybrid-retrieval-with-reranking.md) | Cleaner parsing, hybrid retrieval and reranking; keep Chroma | Accepted |
 | [0011](0011-graded-retrieval-and-answer-checking.md) | Graded retrieval inside a tool, and a fact check on final answers | Accepted |
+| [0012](0012-evaluation-harness-with-langfuse.md) | Evaluation harness: golden dataset, layered scoring, Langfuse Cloud, a stronger judge | Accepted |
 
 Statuses: **Proposed** (under discussion), **Accepted**, **Superseded by NNNN** (replaced by a later decision; the old record is kept, not edited).
 

@@ -31,7 +31,7 @@ import time
 import uuid
 from datetime import datetime
 
-from common import (DATASET_NAME, JUDGE_MODEL, RESULTS_DIR, cost_usd, get_langfuse,
+from common import (DATASET_NAME, JUDGE_MODEL, RESULTS_DIR, cost_usd, get_judge_llm, get_langfuse,
                     langfuse_enabled, load_cases, to_item)
 
 from langchain_core.callbacks import UsageMetadataCallbackHandler  # noqa: E402
@@ -320,7 +320,7 @@ def main():
         description=f"model={os.getenv('OPENROUTER_MODEL', 'default')} verify={not args.no_verify} "
                     f"retrieval={args.retrieval_mode}",
         task=make_task(graph, langfuse_on),
-        evaluators=[retrieval, deterministic, make_judge_evaluator(make_judge(get_llm(model=JUDGE_MODEL))),
+        evaluators=[retrieval, deterministic, make_judge_evaluator(make_judge(get_judge_llm())),
                     cost_and_latency],
         run_evaluators=[averages], max_concurrency=args.concurrency,
     )

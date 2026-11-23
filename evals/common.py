@@ -73,6 +73,18 @@ def to_item(case: dict) -> dict:
     }
 
 
+def get_judge_llm():
+    """The judge model, with a cap on output tokens.
+
+    Without max_tokens, OpenRouter reserves credit for the model's full output
+    limit (65,536 tokens, about USD 0.65 on Sonnet) on every request, although a
+    verdict needs a few hundred. With little credit left, requests were refused.
+    """
+    from llm import get_llm
+
+    return get_llm(model=JUDGE_MODEL).model_copy(update={"max_tokens": 2000})
+
+
 def langfuse_enabled() -> bool:
     return bool(os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"))
 

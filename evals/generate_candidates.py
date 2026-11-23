@@ -18,7 +18,7 @@ import argparse
 import random
 
 import yaml
-from common import CANDIDATES_FILE, JUDGE_MODEL, load_cases
+from common import CANDIDATES_FILE, get_judge_llm, load_cases
 from pydantic import BaseModel, Field
 
 from langchain_core.messages import HumanMessage, SystemMessage  # noqa: E402
@@ -43,7 +43,6 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
-    from llm import get_llm
     from retrieval import get_retriever
 
     existing = yaml.safe_load(CANDIDATES_FILE.read_text(encoding="utf-8")) if CANDIDATES_FILE.exists() else []
@@ -53,7 +52,7 @@ def main():
     # Long passages only: short chunks are usually headings or fragments.
     passages = [d for d in get_retriever().docs if len(d.page_content) > 600]
     random.Random(args.seed).shuffle(passages)
-    writer = get_llm(model=JUDGE_MODEL).with_structured_output(Draft, method="json_schema")
+    writer = get_judge_llm().with_structured_output(Draft, method="json_schema")
 
     drafts = []
     for doc in passages:

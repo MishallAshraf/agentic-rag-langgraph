@@ -22,6 +22,8 @@ Step 6 is done: cleaner PDF parsing into a second collection, and hybrid search 
 
 Step 7 is done: agentic RAG. Searches grade their own results and retry with a rewritten query, and each final answer is fact-checked against its sources, with one revision if it fails.
 
+Step 8 is done: an evaluation harness. A hand-checked golden dataset runs through the agent; every answer is scored for retrieval, rule checks (forbidden text, tool calls, citations, approval) and by a stronger LLM judge, with tracing, experiments and human review in Langfuse.
+
 ## Setup
 
 Requires Python 3.11 on Windows (the pinned requirements include Windows-only packages; see [ADR 0004](docs/adr/0004-pin-all-dependency-versions.md)).
@@ -122,6 +124,36 @@ The reranker model downloads automatically on the first run.
 
 Each search prints its attempts and the grader's verdict, and each answer shows whether it passed the fact check. `--graph` prints both the agent graph and the search subgraph.
 
+## Step 8: evaluation and tracing
+
+Run the golden dataset (`evals/golden.yaml`) through the Step 7 agent and score every answer:
+
+```bash
+.\.venv\Scripts\python.exe evals/run_evals.py --label baseline
+```
+
+Useful options: `--only id1,id2`, `--limit 5`, `--no-verify` (fact check off), `--retrieval-mode keyword`, `--model <openrouter id>`, and `--gate` (exit code 1 if scores fall below thresholds or drop compared with the previous run over the same cases). Results go to `evals/results/` (not committed).
+
+The judge is `anthropic/claude-sonnet-5.5` by default (`EVAL_JUDGE_MODEL` in `.env`). Without Langfuse keys everything runs locally. With `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and `LANGFUSE_HOST` in `.env` (from a free project at https://cloud.langfuse.com), the dataset is synced to Langfuse and each case becomes a trace with the whole graph and its scores, so runs can be compared in the Experiments view.
+
+More test cases and human review:
+
+```bash
+.\.venv\Scripts\python.exe evals/generate_candidates.py --n 10
+```
+
+Drafts land in `evals/candidates.yaml` with `approved: false`; check each against the PDF and set `approved: true` to include it.
+
+```bash
+.\.venv\Scripts\python.exe evals/setup_review.py
+```
+
+```bash
+.\.venv\Scripts\python.exe evals/calibrate.py
+```
+
+The first puts the latest run in a Langfuse annotation queue; after grading answers there, the second reports how often the LLM judge agrees with you (agreement and Cohen's kappa).
+
 ## Project layout
 
 | Path | Contents |
@@ -149,6 +181,12 @@ Each search prints its attempts and the grader's verdict, and each answer shows 
 | `step6_compare.py` | Measures the retrieval methods against each other |
 | `search_graph.py` | Graded search subgraph behind the `search_course_material` tool |
 | `step7_agent.py` | The engine with answer fact-checking |
+| `evals/golden.yaml` | Hand-checked test cases: questions, expected behaviour, key points, pages, rules |
+| `evals/run_evals.py` | Runs the cases through the agent and scores them; Langfuse experiments |
+| `evals/judge.py` | The LLM judge (correct, faithful) |
+| `evals/generate_candidates.py` | LLM-drafted test cases for human review |
+| `evals/setup_review.py`, `evals/calibrate.py` | Human review queue in Langfuse; judge-versus-human agreement |
+| `evals/results/` | Generated: one JSON file per evaluation run |
 | `chunks_clean/` | Generated: the cleaned chunks, for inspection |
 | `notes/` | Generated: notes saved by the agent |
 | `.env.example` | Template for `.env` (API key and model) |

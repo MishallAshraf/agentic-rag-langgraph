@@ -33,6 +33,11 @@ def get_llm(temperature: float = 0, model: str | None = None) -> ChatOpenAI:
         base_url=OPENROUTER_BASE_URL,
         api_key=api_key,
         temperature=temperature,
+        # Without a timeout, a request the provider never answers blocks forever
+        # (seen in Step 8: an evaluation run hung for over an hour). Fail after
+        # 60 s and retry twice instead.
+        timeout=60,
+        max_retries=2,
         # Ask for token counts on streamed responses too, so we can show them.
         stream_usage=True,
     )

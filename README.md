@@ -155,3 +155,7 @@ Each search prints its attempts and the grader's verdict, and each answer shows 
 | `chunks/` | Generated: every chunk as a text file, for inspection |
 | `chroma_db/` | Generated: the persisted vector store |
 | `docs/` | Roadmap, course notes and ADRs |
+
+## Licence
+
+The code is released under the [MIT License](LICENSE). Source documents are not included and keep their own licences.

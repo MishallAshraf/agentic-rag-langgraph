@@ -13,6 +13,9 @@ search_course_material; the loop happens inside it. A graph used inside
 another graph's node or tool like this is called a subgraph.
 """
 
+import re
+import threading
+from collections import OrderedDict
 from pathlib import Path
 from typing import TypedDict
 
@@ -28,6 +31,15 @@ from step1_ingest import format_page
 TOP_K = 4
 MAX_ATTEMPTS = 3
 VERBOSE = True  # print each attempt; the eval runner turns this off
+# Step 9: an EXACT cache of graded searches, keyed on the normalised question.
+# Not a semantic cache: measured in Step 9, reworded questions scored 0.96-0.98
+# similarity, but "does the relationship matter more than technique?" and its
+# reverse scored 0.99. No threshold separates right hits from wrong ones.
+CACHE_ENABLED = True  # the eval runner turns this off, so cases stay independent
+CACHE_SIZE = 256
+_cache: OrderedDict[str, str] = OrderedDict()
+_cache_lock = threading.Lock()
+cache_stats = {"hits": 0, "misses": 0}
 
 GRADER_PROMPT = """You check search results for a study assistant before it answers a student.
 Given the student's question and numbered passages from the course material:
@@ -117,6 +129,11 @@ def get_search_graph():
     return _graph
 
 
+def cache_key(question: str) -> str:
+    """Lowercase, punctuation and extra spaces removed: 'What is X?' == 'what is x'."""
+    return " ".join(re.findall(r"[a-z0-9']+", question.lower()))
+
+
 @tool
 def search_course_material(question: str, query: str) -> str:
     """Search the course material on counselling and psychotherapy, checking that
@@ -130,6 +147,24 @@ def search_course_material(question: str, query: str) -> str:
         question: the student's question that the passages should answer.
         query: a short search query to start with.
     """
+    key = cache_key(question)
+    if CACHE_ENABLED:
+        with _cache_lock:
+            if key in _cache:
+                _cache.move_to_end(key)  # least recently used is evicted first
+                cache_stats["hits"] += 1
+                return _cache[key]
+            cache_stats["misses"] += 1
+    output = _search(question, query)
+    if CACHE_ENABLED:
+        with _cache_lock:
+            _cache[key] = output
+            if len(_cache) > CACHE_SIZE:
+                _cache.popitem(last=False)
+    return output
+
+
+def _search(question: str, query: str) -> str:
     result = get_search_graph().invoke({
         "question": question, "query": query, "queries": [], "passages": [],
         "sufficient": False, "log": [],

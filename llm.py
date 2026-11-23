@@ -21,14 +21,15 @@ DEFAULT_MODEL = "anthropic/claude-haiku-5.5"
 load_dotenv()
 
 
-def get_llm(temperature: float = 0) -> ChatOpenAI:
+def get_llm(temperature: float = 0, model: str | None = None) -> ChatOpenAI:
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         raise SystemExit(
             "OPENROUTER_API_KEY is not set. Copy .env.example to .env and put your key in it."
         )
     return ChatOpenAI(
-        model=os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL),
+        # An explicit model wins (the eval judge uses a stronger one), then .env, then the default.
+        model=model or os.getenv("OPENROUTER_MODEL", DEFAULT_MODEL),
         base_url=OPENROUTER_BASE_URL,
         api_key=api_key,
         temperature=temperature,

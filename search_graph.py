@@ -27,6 +27,7 @@ from step1_ingest import format_page
 
 TOP_K = 4
 MAX_ATTEMPTS = 3
+VERBOSE = True  # print each attempt; the eval runner turns this off
 
 GRADER_PROMPT = """You check search results for a study assistant before it answers a student.
 Given the student's question and numbered passages from the course material:
@@ -81,7 +82,8 @@ def build_search_graph(llm):
         kept = [d for i, d in enumerate(state["passages"], start=1) if i in verdict.relevant]
         entry = (f"attempt {len(state['queries'])}: '{state['query']}' -> "
                  f"{len(kept)} relevant, enough: {'yes' if verdict.sufficient else 'no'}")
-        print(f"    [search] {entry}")
+        if VERBOSE:
+            print(f"    [search] {entry}")
         update = {"passages": kept, "sufficient": verdict.sufficient, "log": state["log"] + [entry]}
         if verdict.next_query.strip():
             update["query"] = verdict.next_query.strip()

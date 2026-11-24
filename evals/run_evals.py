@@ -32,7 +32,7 @@ from pathlib import Path
 import uuid
 from datetime import datetime
 
-from common import (JUDGE_MODEL, dataset_name, RESULTS_DIR, cost_usd, get_judge_llm, get_langfuse,
+from common import (JUDGE_MODEL, dataset_name, langfuse_item_id, RESULTS_DIR, cost_usd, get_judge_llm, get_langfuse,
                     langfuse_enabled, load_cases, to_item)
 
 from langchain_core.callbacks import UsageMetadataCallbackHandler  # noqa: E402
@@ -214,18 +214,25 @@ def averages(*, item_results, **_):
 # ------------------------------------------------------------------ main
 
 def sync_dataset(langfuse, cases, name, description):
-    """Upsert the cases into the Langfuse dataset; the case id is the item id."""
+    """Upsert the cases into the Langfuse dataset, under ids unique across datasets (langfuse_item_id)."""
     langfuse.create_dataset(name=name, description=description)
     for case in cases:
         item = to_item(case)
-        langfuse.create_dataset_item(dataset_name=name, id=item["id"], input=item["input"],
+        langfuse.create_dataset_item(dataset_name=name, id=langfuse_item_id(name, item["id"]), input=item["input"],
                                      expected_output=item["expected_output"], metadata=item["metadata"])
+
+
+def case_id_of(item) -> str:
+    """The YAML case id of a result's item: a plain dict when Langfuse is off, a dataset item when on."""
+    if isinstance(item, dict):
+        return item["id"]
+    return (item.metadata or {}).get("case_id") or item.id
 
 
 def summarise(result, cases_by_id, label, args):
     rows = []
     for r in result.item_results:
-        item_id = r.item["id"] if isinstance(r.item, dict) else r.item.id
+        item_id = case_id_of(r.item)
         rows.append({"id": item_id, "category": cases_by_id[item_id]["category"],
                      "trace_id": r.trace_id, "output": r.output,
                      "scores": {e.name: e.value for e in r.evaluations},
@@ -347,8 +354,8 @@ def main():
         # Always the full dataset, whatever --only selects.
         sync_dataset(langfuse, load_cases(dataset=dataset_file), name, f"Test cases for {bot.name}")
         dataset = langfuse.get_dataset(name)
-        selected = set(cases_by_id)
-        dataset.items = [i for i in dataset.items if i.id in selected]
+        selected = {langfuse_item_id(name, case_id) for case_id in cases_by_id}
+        dataset.items = [i for i in dataset.items if i.id in selected]  # also drops items from before the fix
         result = dataset.run_experiment(**experiment)
     else:
         result = langfuse.run_experiment(data=[to_item(c) for c in cases], **experiment)

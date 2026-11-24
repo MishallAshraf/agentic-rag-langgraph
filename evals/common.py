@@ -23,6 +23,17 @@ DATASET_NAME = "study-assistant-golden"
 def dataset_name(bot_id: str) -> str:
     """The Langfuse dataset for a bot: one per bot, so their results never mix."""
     return DATASET_NAME if bot_id == "study_assistant" else f"{bot_id.replace('_', '-')}-golden"
+
+
+def langfuse_item_id(dataset: str, case_id: str) -> str:
+    """The id of a case's item in Langfuse, where item ids must be unique across ALL datasets.
+
+    Every generated bot starts with tests called gen-1, gen-2..., so the plain case id clashed as
+    soon as a second bot was evaluated with Langfuse on. Other datasets get the dataset name in
+    front; the study assistant's dataset came first and keeps its plain ids, so its run history
+    stays linked to the same items.
+    """
+    return case_id if dataset == DATASET_NAME else f"{dataset}.{case_id}"
 # A stronger model than the agent's, so the judge does not share the agent's blind spots.
 JUDGE_MODEL = os.getenv("EVAL_JUDGE_MODEL", "anthropic/claude-sonnet-5.5")
 
@@ -79,6 +90,7 @@ def to_item(case: dict) -> dict:
             "must_not_call": case.get("must_not_call", []),
             **({"approve": case["approve"]} if "approve" in case else {}),
             "source": "generated" if case.get("generated") else "hand-written",
+            "case_id": case["id"],  # the YAML id, whatever id the item has in Langfuse
         },
     }
 

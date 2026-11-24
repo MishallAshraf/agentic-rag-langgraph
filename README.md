@@ -32,6 +32,8 @@ Step 11 is done: an HTTP API. FastAPI serves every bot; a message's reply stream
 
 Step 12 is done: a web frontend (React, TypeScript, Vite). Pick a bot, and its chat takes the bot's colour and avatar; answers stream in as drafts with the agent's steps beside them, then settle into the checked answer with its sources; tools that change things show an approval card; conversations survive a reload.
 
+Step 13 is done: users and permissions. People sign in (bcrypt passwords, server-side sessions in an HttpOnly cookie); each member sees only the bots granted to them, and so only those bots' documents; conversations and notes are private to their owner; daily quotas cap messages and tokens per user; and every security-relevant event goes into a hash-chained audit log.
+
 ## Setup
 
 Requires Python 3.11 on Windows (the pinned requirements include Windows-only packages; see [ADR 0004](docs/adr/0004-pin-all-dependency-versions.md)).
@@ -205,6 +207,25 @@ cd frontend; npm install; npm run dev     # terminal 2, then open http://localho
 
 Choose a bot, ask a question or click a suggested one, and watch the steps and the draft while the answer is checked. Ask the study assistant to save a note to see the approval card. More in [frontend/README.md](frontend/README.md) and [ADR 0017](docs/adr/0017-react-frontend-themed-per-bot.md).
 
+## Step 13: users and permissions
+
+Create the first account (an admin can use every bot), then members with access to chosen bots:
+
+```bash
+.\.venv\Scripts\python.exe manage_users.py add-user admin --role admin     # asks for a password
+.\.venv\Scripts\python.exe manage_users.py add-user alice
+.\.venv\Scripts\python.exe manage_users.py grant alice architecture_guide
+.\.venv\Scripts\python.exe manage_users.py users
+```
+
+Then start the API and the frontend as in Steps 11 and 12 and sign in. `manage_users.py audit` shows the latest security events and `audit --verify` checks that none were changed. The tests run without the LLM:
+
+```bash
+.\.venv\Scripts\python.exe -m unittest tests.test_auth -v
+```
+
+Conversations started before Step 13 have no owner, so the API does not show them; the terminal agents (`step9_agent.py`) still can. See [ADR 0018](docs/adr/0018-authentication-authorization-quotas-audit.md).
+
 ## Project layout
 
 | Path | Contents |
@@ -226,7 +247,7 @@ Choose a bot, ask a question or click a suggested one, and watch the steps and t
 | `mcp_servers/notes_server.py` | MCP server offering `save_note` and `list_notes` |
 | `step4_agent.py` | Generic agent engine with human approval |
 | `step5_agent.py` | The engine with persistent memory and compaction |
-| `data/` | Generated: `checkpoints.sqlite`, the saved conversations |
+| `data/` | Generated: `checkpoints.sqlite` (conversations) and `auth.sqlite` (users, sessions, audit log) |
 | `step6_ingest.py` | Cleaner ingestion (PyMuPDF, no footers, reference lists tagged) into `documents_clean` |
 | `retrieval.py` | Vector, keyword (BM25), hybrid and reranked search |
 | `step6_compare.py` | Measures the retrieval methods against each other |
@@ -235,7 +256,10 @@ Choose a bot, ask a question or click a suggested one, and watch the steps and t
 | `guardrails.py` | Input check (crisis, injection), tool output marked as data, canary |
 | `step9_agent.py` | The Step 7 agent inside guardrails, with a step limit and recovery |
 | `api.py` | FastAPI server: bots, conversations, streamed turns (SSE), approvals |
-| `api_client.py` | Terminal client for the API, with timings |
+| `api_client.py` | Terminal client for the API, with sign-in and timings |
+| `auth.py` | Users, sessions, bot grants, conversation owners, quotas, hash-chained audit log |
+| `manage_users.py` | Command line for users, grants and the audit log |
+| `tests/test_auth.py` | Tests for sign-in, access rules, quotas and the audit chain |
 | `frontend/` | Web app (React, TypeScript, Vite): bot list, themed chat, streaming, approvals |
 | `evals/golden.yaml` | Hand-checked test cases: questions, expected behaviour, key points, pages, rules |
 | `evals/run_evals.py` | Runs the cases through the agent and scores them; Langfuse experiments |
@@ -247,7 +271,7 @@ Choose a bot, ask a question or click a suggested one, and watch the steps and t
 | `evals/bots/` | Generated test cases for generated bots, one file per bot |
 | `evals/results/` | Generated: one JSON file per evaluation run |
 | `chunks_clean/` | Generated: the cleaned chunks, for inspection |
-| `notes/` | Generated: notes saved by the agent, one folder per bot |
+| `notes/` | Generated: notes saved by the agent, per bot and per user |
 | `.env.example` | Template for `.env` (API key and model) |
 | `chunks/` | Generated: every chunk as a text file, for inspection |
 | `chroma_db/` | Generated: the persisted vector store |

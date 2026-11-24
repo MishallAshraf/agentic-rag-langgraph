@@ -69,6 +69,7 @@ from langgraph.types import Command
 from pydantic import BaseModel, Field
 from sse_starlette import EventSourceResponse, ServerSentEvent
 
+import analysis
 import step9_agent
 import step14_research
 from auth import SESSION_TTL_S, AuthStore, User
@@ -666,6 +667,78 @@ async def decide_build(request: Request, build_id: str, body: DecisionIn, user: 
                                        detail={"build": build.id, "decision": body.decision,
                                                "result": build.status})
     return build_detail(build)
+
+
+# ------------------------------------------------------------------ routes: error analysis (Step 17)
+# A domain expert labels a bot's conversations here; the LLM steps run from analysis.py.
+
+class LabelIn(BaseModel):
+    verdict: Literal["pass", "fail"]
+    note: str = Field("", max_length=analysis.MAX_NOTE)
+    first_failure: Literal[analysis.STEPS] | None = None
+
+
+class ModesIn(BaseModel):
+    modes: list[str] = Field(default_factory=list, max_length=10)
+
+
+def workspace_for(bot_id: str) -> analysis.Workspace:
+    try:
+        ws = analysis.Workspace(bot_id)
+    except ValueError:
+        raise HTTPException(404, "No analysis for this bot") from None
+    if not ws.exists():
+        raise HTTPException(404, "No analysis for this bot")
+    return ws
+
+
+@app.get("/admin/analysis")
+async def list_analyses(user: User = Depends(admin_user)):
+    return [ws.summary() for ws in analysis.workspaces()]
+
+
+@app.get("/admin/analysis/{bot_id}")
+async def get_analysis(bot_id: str, user: User = Depends(admin_user)):
+    return workspace_for(bot_id).detail()
+
+
+@app.put("/admin/analysis/{bot_id}/labels/{trace_id}")
+async def save_label(request: Request, bot_id: str, trace_id: str, body: LabelIn, user: User = Depends(admin_user)):
+    ws = workspace_for(bot_id)
+    try:
+        label = ws.save_label(trace_id, body.verdict, body.note, body.first_failure, by=user.username)
+    except KeyError:
+        raise HTTPException(404, "No such conversation") from None
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+    await request.app.state.auth.audit(user.username, "analysis.label", bot_id=bot_id, ip=client_ip(request),
+                                       detail={"trace": trace_id, "verdict": body.verdict})
+    return {"label": label, "summary": ws.summary(), "taxonomy": ws.taxonomy() or None}
+
+
+@app.put("/admin/analysis/{bot_id}/assignments/{trace_id}")
+async def assign_modes(request: Request, bot_id: str, trace_id: str, body: ModesIn,
+                       user: User = Depends(admin_user)):
+    ws = workspace_for(bot_id)
+    try:
+        taxonomy = ws.set_assignment(trace_id, body.modes)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+    await request.app.state.auth.audit(user.username, "analysis.assign", bot_id=bot_id, ip=client_ip(request),
+                                       detail={"trace": trace_id, "modes": body.modes})
+    return taxonomy
+
+
+@app.post("/admin/analysis/{bot_id}/taxonomy/approve")
+async def approve_taxonomy(request: Request, bot_id: str, user: User = Depends(admin_user)):
+    ws = workspace_for(bot_id)
+    try:
+        taxonomy = ws.approve_taxonomy(by=user.username)
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from None
+    await request.app.state.auth.audit(user.username, "analysis.approve", bot_id=bot_id, ip=client_ip(request),
+                                       detail={"modes": [m["id"] for m in taxonomy["modes"]]})
+    return taxonomy
 
 
 if __name__ == "__main__":

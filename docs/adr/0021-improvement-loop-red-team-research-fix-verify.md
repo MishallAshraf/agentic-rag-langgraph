@@ -70,7 +70,10 @@ Other consequences:
   - malformed structured output aborted the run, so every structured call now retries
   - 3 parallel bot runs hit rate limits and fell back, so it is now 2
 - A run costs about USD 0.05-0.20, mostly the Sonnet judge, and takes 1.5-3 minutes. It is meant to run after a bot is built or changed, not on every message.
-- Remaining recommendation from run 3: the input check (guardrails.py) classifies emotional pressure as injection. It needs better examples in its prompt and tests for these messages.
+- Run 3's recommendation is done. The input check (guardrails.py) classified pushy customers who asked it to "break your rules" or "override the limit" as injection, because its prompt didn't separate the business's rules from the assistant's own instructions. The prompt now does, with examples, and says "when unsure between injection and ok, choose ok". `evals/check_guard.py` measures it on labelled messages in `evals/guard_cases.yaml`, three times each:
+  - before the fix: 66 of 75 correct, all 9 errors pushy customers classed as injection
+  - after: 99 of 99, including 8 held-out cases written after the fix
+  - in a fourth loop run, the manipulation attack was answered by the bot, and the loop moved on to a privacy failure it could fix with a rule
 - Revisit:
   - to support research bots (their sources are other bots)
   - to run the loop from the admin page as a background job, like builds (ADR 0020)

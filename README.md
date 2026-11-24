@@ -30,6 +30,8 @@ Step 10 is done: a bot builder. Point it at a folder of documents and describe a
 
 Step 11 is done: an HTTP API. FastAPI serves every bot; a message's reply streams back as Server-Sent Events (progress, the answer token by token, then the final checked answer with its sources), approvals pause and resume across requests, and the server guards itself with a lock per conversation, a rate limit, a time budget per turn and repair after a disconnect.
 
+Step 12 is done: a web frontend (React, TypeScript, Vite). Pick a bot, and its chat takes the bot's colour and avatar; answers stream in as drafts with the agent's steps beside them, then settle into the checked answer with its sources; tools that change things show an approval card; conversations survive a reload.
+
 ## Setup
 
 Requires Python 3.11 on Windows (the pinned requirements include Windows-only packages; see [ADR 0004](docs/adr/0004-pin-all-dependency-versions.md)).
@@ -192,6 +194,17 @@ To re-index a bot's documents after they change: `python ingest.py bots/<id>.yam
 
 The client shows each event as it arrives and, after each answer, the time to the first event, the first token and the final answer. Approvals are asked for in the terminal and sent to the approval route. The routes, the events and why tokens are only a preview of the final answer are described at the top of `api.py` and in [ADR 0016](docs/adr/0016-fastapi-with-server-sent-events.md). The server listens on localhost only: there is no authentication until Step 13.
 
+## Step 12: web frontend
+
+Needs Node.js 20 or later.
+
+```bash
+.\.venv\Scripts\python.exe api.py      # terminal 1
+cd frontend; npm install; npm run dev     # terminal 2, then open http://localhost:5173
+```
+
+Choose a bot, ask a question or click a suggested one, and watch the steps and the draft while the answer is checked. Ask the study assistant to save a note to see the approval card. More in [frontend/README.md](frontend/README.md) and [ADR 0017](docs/adr/0017-react-frontend-themed-per-bot.md).
+
 ## Project layout
 
 | Path | Contents |
@@ -223,6 +236,7 @@ The client shows each event as it arrives and, after each answer, the time to th
 | `step9_agent.py` | The Step 7 agent inside guardrails, with a step limit and recovery |
 | `api.py` | FastAPI server: bots, conversations, streamed turns (SSE), approvals |
 | `api_client.py` | Terminal client for the API, with timings |
+| `frontend/` | Web app (React, TypeScript, Vite): bot list, themed chat, streaming, approvals |
 | `evals/golden.yaml` | Hand-checked test cases: questions, expected behaviour, key points, pages, rules |
 | `evals/run_evals.py` | Runs the cases through the agent and scores them; Langfuse experiments |
 | `evals/judge.py` | The LLM judge (correct, faithful) |

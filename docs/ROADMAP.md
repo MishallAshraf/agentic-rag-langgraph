@@ -17,8 +17,8 @@ Each step builds on the previous one and maps to topics from the "Mastering AI s
 | 9 | Done | Hardening | Timeouts, retries, fallbacks; semantic and prompt caching; cost modelling; guardrails; prompt injection |
 | 10 | Done | Bot builder: configuration schema, builder agent, one document collection per bot, automatic evaluation of generated bots | Structured outputs; context engineering; multi-tenancy; evals for generated bots |
 | 11 | Done | Backend API (FastAPI, streaming over Server-Sent Events) | API design; streaming; rate limiting; latency budgets |
-| 12 | Next | React frontend (Vite, React, TypeScript), themed per bot | Streaming UX; showing sources and agent steps; human approval UI |
-| 13 | | Authentication and authorization, per user and per bot | Retrieval access control; per-tenant quotas; audit logging |
+| 12 | Done | React frontend (Vite, React, TypeScript), themed per bot | Streaming UX; showing sources and agent steps; human approval UI |
+| 13 | Next | Authentication and authorization, per user and per bot | Retrieval access control; per-tenant quotas; audit logging |
 | 14 | | Multi-agent bots | Multi-agent orchestration; deep research case study |
 
 ## Principles carried through every step
@@ -33,7 +33,7 @@ Training and adaptation (fine-tuning, preference tuning, distributed training) a
 
 ## Prerequisites still to install
 
-- Node.js LTS, needed from Step 12.
+None. (Node.js was installed for Step 12.)
 
 ## Open decisions
 

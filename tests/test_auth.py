@@ -11,15 +11,12 @@ import os
 import secrets
 import sqlite3
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 
 # Settings are read when the modules load, so set them first.
-TMP = Path(tempfile.mkdtemp())
-os.environ["AUTH_DB"] = str(TMP / "auth.sqlite")
-os.environ["QUOTA_TURNS_PER_DAY"] = "3"
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import tests._env  # noqa: E402, F401
 
 from fastapi.testclient import TestClient  # noqa: E402
 

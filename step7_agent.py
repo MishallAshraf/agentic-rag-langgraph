@@ -43,6 +43,7 @@ from search_graph import build_search_graph
 from step4_agent import ask_human, print_update
 from step5_agent import CHECKPOINT_DB, list_threads, make_compact, thread_config
 from tool_registry import load_tools
+from llm import STRUCTURED_METHOD
 
 DEFAULT_BOT = "bots/study_assistant.yaml"
 SOURCE_TOOLS = {"search_course_material", "search_knowledge", "search_documents", "read_page"}
@@ -75,7 +76,7 @@ def current_turn(messages):
 def build_graph(bot: BotConfig, tools: list, llm, checkpointer, tool_node=None):
     # tool_node: Step 9 passes a ToolNode that marks tool output as data.
     llm_with_tools = llm.bind_tools(tools) if llm is not None else None
-    checker = llm.with_structured_output(Verdict, method="function_calling") if llm else None
+    checker = llm.with_structured_output(Verdict, method=STRUCTURED_METHOD) if llm else None
     compact = make_compact(llm)
     needs_approval = set(bot.approval_required)
 

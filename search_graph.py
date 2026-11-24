@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 
 from retrieval import CLEAN_COLLECTION, get_retriever
 from step1_ingest import format_page
+from llm import STRUCTURED_METHOD
 
 TOP_K = 4
 MAX_ATTEMPTS = 3
@@ -80,9 +81,10 @@ def label(doc: Document) -> str:
 
 
 def build_search_graph(llm, collection: str = CLEAN_COLLECTION, subject: str = STUDY_SUBJECT):
-    # method="function_calling" asks for the schema as a tool call, which works
-    # across the models OpenRouter offers.
-    grader = llm.with_structured_output(Grade, method="function_calling") if llm else None
+    # STRUCTURED_METHOD (json_schema) asks the provider to constrain the reply to the schema.
+    # Step 7 used a forced tool call here; Step 16 found that OpenRouter answered it with the
+    # fallback model, not the one configured (see llm.py).
+    grader = llm.with_structured_output(Grade, method=STRUCTURED_METHOD) if llm else None
     prompt = GRADER_PROMPT.format(subject=subject)
 
     def retrieve(state: SearchState):

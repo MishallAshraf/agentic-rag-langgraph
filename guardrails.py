@@ -32,6 +32,7 @@ from typing import Literal
 
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from pydantic import BaseModel, Field
+from llm import STRUCTURED_METHOD
 
 # ------------------------------------------------------------------ 1. input check
 
@@ -74,7 +75,7 @@ class InputCheck(BaseModel):
 
 
 def make_input_check(llm, bot):
-    classifier = llm.with_structured_output(InputCheck, method="function_calling")
+    classifier = llm.with_structured_output(InputCheck, method=STRUCTURED_METHOD)
     prompt = GUARD_PROMPT.format(bot=f"{bot.name}. {bot.description}")
 
     async def check(text: str) -> tuple[str, str]:

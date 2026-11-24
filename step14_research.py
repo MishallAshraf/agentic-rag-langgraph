@@ -51,6 +51,7 @@ import step9_agent
 from bot_config import BotConfig, load_bot
 from guardrails import DATA_RULE
 from search_graph import search
+from llm import STRUCTURED_METHOD
 
 ROOT = Path(__file__).parent
 DEFAULT_BOT = "bots/research_assistant.yaml"
@@ -168,9 +169,9 @@ def build_research_graph(bot: BotConfig, sources: dict[str, BotConfig], llm):
     """bot: the research bot (its system prompt already hardened by Step 9); sources: id -> bot with knowledge."""
     research = bot.research
     # llm is None only when printing the graph.
-    planner = llm.with_structured_output(Plan, method="function_calling") if llm else None
-    researcher = llm.with_structured_output(Finding, method="function_calling") if llm else None
-    reviewer = llm.with_structured_output(Review, method="function_calling") if llm else None
+    planner = llm.with_structured_output(Plan, method=STRUCTURED_METHOD) if llm else None
+    researcher = llm.with_structured_output(Finding, method=STRUCTURED_METHOD) if llm else None
+    reviewer = llm.with_structured_output(Review, method=STRUCTURED_METHOD) if llm else None
 
     async def plan(state: ResearchState, config: RunnableConfig):
         usable = allowed(config, sources)

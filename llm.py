@@ -19,6 +19,11 @@ from langchain_openai import ChatOpenAI
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = "anthropic/claude-haiku-5.5"
 MAX_OUTPUT_TOKENS = 2000
+# How every component asks for structured output (graders, guards, checkers, agents).
+# Not "function_calling": with it, the forced tool call was answered by the fallback model
+# (gpt-4o-mini), not the configured one; OpenRouter switched quietly instead of failing. Found in Step 16, when the
+# improvement loop showed the guard, grader and fact check had all been running on gpt-4o-mini.
+STRUCTURED_METHOD = "json_schema"
 # Tried in order if the main model fails (Step 9). OpenRouter already retries
 # other PROVIDERS of the same model; this covers the model itself being down.
 # A different vendor, so one company's outage cannot take out both.

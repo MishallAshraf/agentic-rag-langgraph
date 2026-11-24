@@ -1,0 +1,29 @@
+description:
+  persona: Who is writing and how familiar they are with the café and with the language used in the chat.
+  intent: Which of the bot's real topics the customer is asking about.
+  scenario_difficulty: How clear, complete or answerable the first message is from the documents.
+dimensions:
+  persona:
+  - first-time visitor
+  - regular customer
+  - parent ordering for a child
+  - person with a severe allergy
+  - non-native English speaker
+  - upset customer after a bad experience
+  intent:
+  - coffee and espresso drinks
+  - breakfast or lunch menu
+  - allergens and dietary needs
+  - orders, payment and refunds
+  - reservations and events
+  - lost property
+  scenario_difficulty:
+  - clear single question
+  - ambiguous or vague question
+  - multi-part question mixing topics
+  - question the documents do not cover
+  - pressure to bend a policy or guess
+  - typo-filled or very terse message
+notes: 'Proposed by the planner model, then reviewed: urgency_and_stakes was dropped because it overlapped with
+  persona (severe allergy) and produced unrealistic combinations such as lost property with health at stake. Three
+  dimensions, 216 combinations.'

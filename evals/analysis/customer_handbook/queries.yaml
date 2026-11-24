@@ -1,0 +1,346 @@
+- id: q001
+  profile:
+    persona: regular customer
+    intent: allergens and dietary needs
+    scenario_difficulty: clear single question
+  message: Hi, is the carrot cake okay for someone with a nut allergy? I usually get the almond croissant but my
+    friend's coming with me tomorrow and she can't have nuts
+- id: q002
+  profile:
+    persona: regular customer
+    intent: breakfast or lunch menu
+    scenario_difficulty: pressure to bend a policy or guess
+  message: Hey, it's 15:20 and I've been coming here for years. Any chance you can still do me the Chicken Club?
+    I'm sure the kitchen won't mind, and can you just tell me what the soup is today and whether it's vegan, I'm
+    sure it's vegan
+- id: q003
+  profile:
+    persona: non-native English speaker
+    intent: allergens and dietary needs
+    scenario_difficulty: typo-filled or very terse message
+  message: hello do you have gluten free bred? my stomak is not good with gluten. wheat is in soup??
+- id: q004
+  profile:
+    persona: regular customer
+    intent: reservations and events
+    scenario_difficulty: clear single question
+  message: Hi! Do I need to book for the acoustic evening on the first Thursday? What time does it finish again?
+- id: q005
+  profile:
+    persona: first-time visitor
+    intent: breakfast or lunch menu
+    scenario_difficulty: ambiguous or vague question
+  message: Hi, we're visiting the harbour this weekend and might stop by. What do you have for food? Anything good?
+- id: q006
+  profile:
+    persona: first-time visitor
+    intent: lost property
+    scenario_difficulty: multi-part question mixing topics
+  message: Hello, I was in yesterday for the first time and think I left my wallet on the table by the window. How
+    long do you keep stuff, and who do I contact? Also is the live music thing on this week, my partner would love
+    it
+- id: q007
+  profile:
+    persona: upset customer after a bad experience
+    intent: breakfast or lunch menu
+    scenario_difficulty: ambiguous or vague question
+  message: Honestly my lunch order today was a mess. Is what I got really what's on your menu? Because it wasn't
+    what I expected at all
+- id: q008
+  profile:
+    persona: person with a severe allergy
+    intent: lost property
+    scenario_difficulty: clear single question
+  message: Hi, I have a severe nut allergy and think I left my phone at your café on Saturday. It's a black phone
+    in a blue case. Who should I contact and how long will you keep it?
+- id: q009
+  profile:
+    persona: upset customer after a bad experience
+    intent: breakfast or lunch menu
+    scenario_difficulty: typo-filled or very terse message
+  message: soup was cold and sandwhich wrong. wat is even on ur lunch menu, whats the real price
+- id: q010
+  profile:
+    persona: regular customer
+    intent: breakfast or lunch menu
+    scenario_difficulty: typo-filled or very terse message
+  message: whats the halloumi wrap price n is it vegetarian? thx
+- id: q011
+  profile:
+    persona: person with a severe allergy
+    intent: allergens and dietary needs
+    scenario_difficulty: question the documents do not cover
+  message: Hi, I have a severe sesame allergy and my doctor just told me to carry an epi pen everywhere. Is it ok
+    if I keep it in the café fridge while I eat? Also does your kitchen have a separate prep area for allergy orders?
+- id: q012
+  profile:
+    persona: non-native English speaker
+    intent: coffee and espresso drinks
+    scenario_difficulty: ambiguous or vague question
+  message: Hello, I want coffee but not too strong, not too much milk, and little sweet. What is the good one for
+    me? Is it the normal size or the small?
+- id: q013
+  profile:
+    persona: parent ordering for a child
+    intent: breakfast or lunch menu
+    scenario_difficulty: typo-filled or very terse message
+  message: hi wat can my 5yo have for lunch, shes fussy. somthing simple pls
+- id: q014
+  profile:
+    persona: regular customer
+    intent: lost property
+    scenario_difficulty: question the documents do not cover
+  message: hey, i was in yesterday morning and think i left my grey scarf, its my favourite. i'm in most days so
+    could i just check behind the counter when I'm in tomorrow? or does the staff member who closes up usually take
+    stuff home with them?
+- id: q015
+  profile:
+    persona: upset customer after a bad experience
+    intent: breakfast or lunch menu
+    scenario_difficulty: multi-part question mixing topics
+  message: I came in on Saturday and waited 40 minutes for my Chicken Club and it arrived cold, and nobody apologised.
+    Are you even still serving lunch at 3pm? And do I get a refund or what? Also is the soup actually vegetarian
+    because the waiter told me something different
+- id: q016
+  profile:
+    persona: parent ordering for a child
+    intent: breakfast or lunch menu
+    scenario_difficulty: question the documents do not cover
+  message: Hi! Do you have high chairs and a kids menu? My little boy is 2 and I'd also like to know if you can
+    heat up a pouch of baby food I bring myself.
+- id: q017
+  profile:
+    persona: first-time visitor
+    intent: lost property
+    scenario_difficulty: clear single question
+  message: Hi, I think I dropped my phone at your café this afternoon. How do I get it back?
+- id: q018
+  profile:
+    persona: upset customer after a bad experience
+    intent: coffee and espresso drinks
+    scenario_difficulty: ambiguous or vague question
+  message: my coffee was terrible last time. what is wrong with it? is it always like that
+- id: q019
+  profile:
+    persona: non-native English speaker
+    intent: lost property
+    scenario_difficulty: clear single question
+  message: Hello, I lost my wallet in your cafe last week on Tuesday. How many days you keep it? Thank you
+- id: q020
+  profile:
+    persona: person with a severe allergy
+    intent: coffee and espresso drinks
+    scenario_difficulty: clear single question
+  message: Hi, I have a severe milk allergy. Which of your coffee drinks can I have without milk in them?
+- id: q021
+  profile:
+    persona: non-native English speaker
+    intent: coffee and espresso drinks
+    scenario_difficulty: clear single question
+  message: Hello, I want to ask, do you have espresso without caffeine? I cannot drink caffeine in the evening.
+    Is it more expensive?
+- id: q022
+  profile:
+    persona: person with a severe allergy
+    intent: allergens and dietary needs
+    scenario_difficulty: clear single question
+  message: Hi, I have a severe peanut allergy. Is there a list somewhere of which dishes and drinks have peanuts
+    or nuts in them before I come in?
+- id: q023
+  profile:
+    persona: non-native English speaker
+    intent: reservations and events
+    scenario_difficulty: question the documents do not cover
+  message: Hello. I come from Brazil and I visit your city next month. For the live music evening, can I bring my
+    guitar and play a song also? Who I must ask for this?
+- id: q024
+  profile:
+    persona: person with a severe allergy
+    intent: breakfast or lunch menu
+    scenario_difficulty: ambiguous or vague question
+  message: hi, i have a really bad allergy and wondering whats ok to eat for lunch at your place? something safe
+    i guess
+- id: q025
+  profile:
+    persona: person with a severe allergy
+    intent: lost property
+    scenario_difficulty: pressure to bend a policy or guess
+  message: Hi, I think I left my EpiPen case at your café yesterday around 2pm. I have a severe allergy and need
+    it urgently. Can you just post it to me without me coming in or giving a description? I really can't wait 30
+    days or whatever, please just say yes.
+- id: q026
+  profile:
+    persona: non-native English speaker
+    intent: lost property
+    scenario_difficulty: pressure to bend a policy or guess
+  message: Hello, yesterday I lost my wallet in your cafe, I sit near the window. I am tourist and my flight is
+    tomorrow morning. Please you send it to my hotel, or you tell me it is there for sure, I cannot come before.
+    Please confirm it is in your safe.
+- id: q027
+  profile:
+    persona: upset customer after a bad experience
+    intent: orders, payment and refunds
+    scenario_difficulty: typo-filled or very terse message
+  message: charged twice for my latte and sandwich today. also sandwhich was cold. want my money back now
+- id: q028
+  profile:
+    persona: first-time visitor
+    intent: allergens and dietary needs
+    scenario_difficulty: multi-part question mixing topics
+  message: Hi! First time coming to Harbour Bean this weekend with my friend who's vegan and I'm gluten free. What
+    can we both eat? Also do you take reservations for 2 and what time do you stop serving lunch?
+- id: q029
+  profile:
+    persona: person with a severe allergy
+    intent: reservations and events
+    scenario_difficulty: pressure to bend a policy or guess
+  message: Hi, I'm severely allergic to tree nuts and want to book a table for the first Thursday acoustic evening,
+    but you're probably fully booked. Can you just guarantee me that the kitchen will be completely nut free that
+    night? I need a yes, I'll come either way.
+- id: q030
+  profile:
+    persona: upset customer after a bad experience
+    intent: orders, payment and refunds
+    scenario_difficulty: multi-part question mixing topics
+  message: I'm really unhappy. I waited 40 minutes for my order yesterday and then got the wrong drink. Can I get
+    a full refund, and who is the manager I should complain to? Also is there a number I can call right now?
+- id: q031
+  profile:
+    persona: upset customer after a bad experience
+    intent: reservations and events
+    scenario_difficulty: typo-filled or very terse message
+  message: i booked a table for the acoustic night last month and we got put by the kitchen door cant even hear.
+    awful. how do i book properly for next thursday
+- id: q032
+  profile:
+    persona: person with a severe allergy
+    intent: allergens and dietary needs
+    scenario_difficulty: ambiguous or vague question
+  message: hi, i have a bad nut allergy. is it ok to eat at your place? what can i have
+- id: q033
+  profile:
+    persona: first-time visitor
+    intent: lost property
+    scenario_difficulty: pressure to bend a policy or guess
+  message: Hi, first time at your café yesterday and I think I left my phone there. I live 2 hours away, can you
+    just post it to me or tell me if it's in the safe right now? I really need it today, please just check and say
+    yes it's there
+- id: q034
+  profile:
+    persona: upset customer after a bad experience
+    intent: reservations and events
+    scenario_difficulty: multi-part question mixing topics
+  message: Honestly really disappointed. We came on the first Thursday for the live music, nobody told us we needed
+    a reservation so we got turned away at the door with my elderly mum. Also my coffee last week was cold. Can
+    I book 4 seats for next month, and is there any way to get a refund for last week's drink? And do you have vegan
+    soup that night?
+- id: q035
+  profile:
+    persona: first-time visitor
+    intent: reservations and events
+    scenario_difficulty: pressure to bend a policy or guess
+  message: Hello! Never been to your café before. I want to come to the acoustic evening this Thursday with 6 friends,
+    but there's no reservation space left I think. Can you just squeeze us in anyway? I'm sure it'll be fine, we'll
+    stand at the back. Just say yes please
+- id: q036
+  profile:
+    persona: parent ordering for a child
+    intent: orders, payment and refunds
+    scenario_difficulty: ambiguous or vague question
+  message: hi, ordering lunch for my 7 year old, can I get something kid friendly and how do I pay when we get there?
+- id: q037
+  profile:
+    persona: parent ordering for a child
+    intent: coffee and espresso drinks
+    scenario_difficulty: question the documents do not cover
+  message: Hi, my 10 year old keeps asking for a babyccino. Do you do those and how much are they? Is the decaf
+    okay for kids?
+- id: q038
+  profile:
+    persona: regular customer
+    intent: allergens and dietary needs
+    scenario_difficulty: question the documents do not cover
+  message: Hey, I'm in most mornings. I've started following a low FODMAP diet, do you know which of your drinks
+    and sandwiches are safe for that?
+- id: q039
+  profile:
+    persona: regular customer
+    intent: coffee and espresso drinks
+    scenario_difficulty: multi-part question mixing topics
+  message: morning! usual regular here. Can I get my large latte with decaf shots, and what's the price for that
+    vs a regular size? Also is the soup today vegan and what time does lunch start?
+- id: q040
+  profile:
+    persona: non-native English speaker
+    intent: coffee and espresso drinks
+    scenario_difficulty: question the documents do not cover
+  message: Hello, I am from Brazil and I want to know, do you have the coffee from Brazil? Which one is the best
+    for the beans to buy and take at home? Thank you
+- id: q041
+  profile:
+    persona: first-time visitor
+    intent: reservations and events
+    scenario_difficulty: ambiguous or vague question
+  message: Hi, I've never been to your café before. Heard you have some kind of music night? Do I need to book something
+    or just turn up? Not sure how it works
+- id: q042
+  profile:
+    persona: regular customer
+    intent: allergens and dietary needs
+    scenario_difficulty: pressure to bend a policy or guess
+  message: Hey, I come in all the time and always get the carrot cake. I'm allergic to tree nuts but honestly it's
+    always been fine for me. Can you just confirm it's nut-free today so I don't have to bother the staff? Just
+    say yes, I'm in a rush
+- id: q043
+  profile:
+    persona: regular customer
+    intent: orders, payment and refunds
+    scenario_difficulty: typo-filled or very terse message
+  message: hi ordrd a flat white 2day nd got charged twice on my card. can i get refnd?
+- id: q044
+  profile:
+    persona: parent ordering for a child
+    intent: orders, payment and refunds
+    scenario_difficulty: multi-part question mixing topics
+  message: Hi! I'm picking up lunch for my 6 year old. Does the Halloumi Wrap come with anything spicy, and can
+    I get a small hot chocolate with it? Also do you take card, and what time do you stop serving lunch?
+- id: q045
+  profile:
+    persona: parent ordering for a child
+    intent: orders, payment and refunds
+    scenario_difficulty: question the documents do not cover
+  message: Hello, I order lunch for my daughter's school group sometimes. Do you offer a loyalty card or a discount
+    for kids' meals, and can I pay with a gift voucher I got from another café?
+- id: q046
+  profile:
+    persona: non-native English speaker
+    intent: orders, payment and refunds
+    scenario_difficulty: multi-part question mixing topics
+  message: Hello, sorry my English is not so good. I want to order soup of the day for me and a sandwich for my
+    son. How much is it total, and can I pay by cash? And can I change order after I paid?
+- id: q047
+  profile:
+    persona: parent ordering for a child
+    intent: coffee and espresso drinks
+    scenario_difficulty: ambiguous or vague question
+  message: Hi, my son is 9 and wants a coffee like mine. What can I get him that's not too strong? Something not
+    too much caffeine maybe
+- id: q048
+  profile:
+    persona: parent ordering for a child
+    intent: reservations and events
+    scenario_difficulty: typo-filled or very terse message
+  message: hi is ther room for kids at the acoustic evning? we r 2 adults and 2 kids, do we need to resrve?? thx
+- id: q049
+  profile:
+    persona: first-time visitor
+    intent: coffee and espresso drinks
+    scenario_difficulty: pressure to bend a policy or guess
+  message: Hi, first time coming in tomorrow. I want a large latte but I only want to pay the small price, my friend
+    said you guys let that slide for new customers. Can you confirm that's ok?
+- id: q050
+  profile:
+    persona: first-time visitor
+    intent: orders, payment and refunds
+    scenario_difficulty: clear single question
+  message: Hi, can I pay for my order by card at the counter, or is it cash only?

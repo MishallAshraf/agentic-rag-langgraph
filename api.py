@@ -1,5 +1,6 @@
 """Step 11 - The agent behind an HTTP API, streaming over Server-Sent Events.
 Step 13 - With users: sign-in, per-bot access, private conversations, quotas, audit log.
+Step 15 - With the bot builder: admins upload documents and approve new bots (builds.py).
 
     POST /auth/login                               sign in -> session cookie
     POST /auth/logout                              sign out (the session is deleted on the server)
@@ -13,6 +14,11 @@ Step 13 - With users: sign-in, per-bot access, private conversations, quotas, au
     POST /bots/{bot}/threads/{thread}/messages     send a message; the reply streams back (SSE)
     POST /bots/{bot}/threads/{thread}/approval     approve or reject a paused tool call (SSE)
     GET  /admin/audit                              latest audit events and the chain check (admins)
+    POST /admin/builds                             upload documents and start building a bot (admins)
+    GET  /admin/builds                             recent builds
+    GET  /admin/builds/{build}                     one build: progress, and its proposal when ready
+    GET  /admin/builds/{build}/events              its progress as it happens (SSE, resumable)
+    POST /admin/builds/{build}/decision            approve (the bot is served at once) or reject
 
 Why Server-Sent Events: an answer takes 5-30 s (guard, search, grading,
 fact check). SSE keeps one HTTP response open and sends events as they
@@ -53,9 +59,11 @@ from typing import Literal
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from starlette.datastructures import UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.callbacks import UsageMetadataCallbackHandler
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
 from pydantic import BaseModel, Field
@@ -64,6 +72,7 @@ from sse_starlette import EventSourceResponse, ServerSentEvent
 import step9_agent
 import step14_research
 from auth import SESSION_TTL_S, AuthStore, User
+from builds import MAX_FILE_BYTES, MAX_FILES, MAX_TOTAL_BYTES, Build, BuildManager, UploadProblem
 from bot_config import BotConfig, Theme, load_bot
 from step5_agent import CHECKPOINT_DB
 from step7_agent import SOURCE_TOOLS, current_turn
@@ -112,6 +121,11 @@ class Platform:
                 continue
             self.bots[bot.id] = BotEntry(bot)
 
+    def add_bot(self, bot_id: str):
+        """Serve a bot the builder just saved, without a restart (Step 15)."""
+        bot = load_bot(BOTS_DIR / f"{bot_id}.yaml")
+        self.bots[bot.id] = BotEntry(bot)
+
     async def graph_for(self, entry: BotEntry, user: User):
         # A bot whose tools keep per-user data (notes) gets one graph per user,
         # with tools bound to that user's folder; other bots share one graph.
@@ -158,12 +172,31 @@ async def lifespan(app: FastAPI):
             app.state.platform.load_bots()
             app.state.limiter = RateLimiter(RATE_LIMIT, RATE_WINDOW_S)
             app.state.login_limiter = RateLimiter(LOGIN_LIMIT, 60)
-            yield
+            app.state.builds = make_build_manager(app.state.platform)
+            try:
+                yield
+            finally:
+                await app.state.builds.close()
     finally:
         await app.state.auth.close()
 
 
-app = FastAPI(title="Agentic RAG bots", version="0.13.0", lifespan=lifespan)
+def make_build_manager(platform: Platform) -> BuildManager:
+    from llm import get_llm
+    from step10_builder import BUILDER_MODEL, build_builder
+
+    def bot_exists(bot_id: str) -> bool:
+        return bot_id in platform.bots
+
+    removed = BuildManager.clean_orphans(bot_exists)
+    if removed:
+        log.info("deleted uploads of unfinished builds: %s", ", ".join(removed))
+    # A fresh graph per build; its in-memory checkpoint only has to last until the review.
+    return BuildManager(lambda: build_builder(get_llm(model=BUILDER_MODEL), InMemorySaver()),
+                        bot_exists, platform.add_bot)
+
+
+app = FastAPI(title="Agentic RAG bots", version="0.15.0", lifespan=lifespan)
 # No allow_credentials: a cross-origin page can never send the session cookie.
 app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_methods=["GET", "POST"],
                    allow_headers=["Content-Type"])
@@ -192,6 +225,10 @@ class MessageIn(BaseModel):
 
 
 class ApprovalIn(BaseModel):
+    decision: Literal["approve", "reject"]
+
+
+class DecisionIn(BaseModel):
     decision: Literal["approve", "reject"]
 
 
@@ -550,6 +587,85 @@ async def audit_log(request: Request, limit: int = 50, user: User = Depends(admi
     intact, rows, broken_at = await auth.verify_audit()
     return {"chain": {"intact": intact, "rows": rows, "broken_at": broken_at},
             "entries": await auth.audit_entries(min(max(limit, 1), 500))}
+
+
+# ------------------------------------------------------------------ routes: building bots (Step 15)
+
+def build_for(request: Request, build_id: str) -> Build:
+    build = request.app.state.builds.builds.get(build_id)
+    if build is None:
+        raise HTTPException(404, "No such build")
+    return build
+
+
+def build_detail(build: Build) -> dict:
+    return {**build.summary(), "events": build.events, "proposal": build.proposal,
+            "problems": build.problems, "saved": build.saved}
+
+
+@app.post("/admin/builds", status_code=201)
+async def start_build(request: Request, user: User = Depends(admin_user)):
+    # The form is read here, after the admin check, so nobody else can make the server
+    # store large uploads. The declared size is checked before a byte is read.
+    builds: BuildManager = request.app.state.builds
+    if int(request.headers.get("content-length") or 0) > MAX_TOTAL_BYTES + 2**20:
+        raise HTTPException(413, f"The upload is larger than {MAX_TOTAL_BYTES // 2**20} MB.")
+    if builds.busy():
+        raise HTTPException(409, "Another bot is being built. Try again when it has finished.")
+    async with request.form(max_files=MAX_FILES + 1, max_fields=10) as form:
+        bot_id, use_case = str(form.get("bot_id") or "").strip(), str(form.get("use_case") or "")
+        uploads = [f for f in form.getlist("files") if isinstance(f, UploadFile)]
+        try:
+            builds.check_request(bot_id, use_case)
+            # Read at most one byte over the limit: enough to know a file is too large.
+            files = [(f.filename or "file", await f.read(MAX_FILE_BYTES + 1)) for f in uploads]
+            folder, names = builds.store_files(bot_id, files)
+        except UploadProblem as e:
+            raise HTTPException(400, str(e)) from None
+    build = await builds.start(bot_id, use_case, folder, names, by=user.username)
+    await request.app.state.auth.audit(user.username, "build.start", bot_id=bot_id, ip=client_ip(request),
+                                       detail={"build": build.id, "files": len(names),
+                                               "bytes": sum(len(d) for _, d in files)})
+    return build.summary()
+
+
+@app.get("/admin/builds")
+async def list_builds(request: Request, user: User = Depends(admin_user)):
+    return sorted((b.summary() for b in request.app.state.builds.builds.values()),
+                  key=lambda b: b["started"], reverse=True)
+
+
+@app.get("/admin/builds/{build_id}")
+async def get_build(request: Request, build_id: str, user: User = Depends(admin_user)):
+    return build_detail(build_for(request, build_id))
+
+
+@app.get("/admin/builds/{build_id}/events")
+async def build_events(request: Request, build_id: str, after: int = 0, user: User = Depends(admin_user)):
+    build = build_for(request, build_id)
+    # EventSource reconnects by itself and sends the last id it saw: continue from there.
+    last = request.headers.get("last-event-id")
+    after = int(last) if last and last.isdigit() else max(after, 0)
+
+    async def events():
+        async for e in request.app.state.builds.follow(build, after):
+            yield ServerSentEvent(id=str(e["n"]), event="build", data=json.dumps(e, ensure_ascii=False))
+        yield ServerSentEvent(event="end", data=json.dumps({"status": build.status}))
+
+    return EventSourceResponse(events(), ping=15)
+
+
+@app.post("/admin/builds/{build_id}/decision")
+async def decide_build(request: Request, build_id: str, body: DecisionIn, user: User = Depends(admin_user)):
+    build = build_for(request, build_id)
+    try:
+        await request.app.state.builds.decide(build, body.decision)
+    except UploadProblem as e:
+        raise HTTPException(409, str(e)) from None
+    await request.app.state.auth.audit(user.username, "build.decision", bot_id=build.bot_id, ip=client_ip(request),
+                                       detail={"build": build.id, "decision": body.decision,
+                                               "result": build.status})
+    return build_detail(build)
 
 
 if __name__ == "__main__":

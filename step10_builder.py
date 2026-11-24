@@ -309,7 +309,7 @@ def save_files(config: dict, tests: list[dict]) -> list[str]:
                         encoding="utf-8")
     tests_path.write_text("# Generated with the bot: domain questions from its documents, plus platform cases.\n"
                           + yaml.safe_dump(tests, sort_keys=False, allow_unicode=True, width=110), encoding="utf-8")
-    return [str(bot_path.relative_to(ROOT)), str(tests_path.relative_to(ROOT))]
+    return [bot_path.relative_to(ROOT).as_posix(), tests_path.relative_to(ROOT).as_posix()]
 
 
 def show_for_review(payload: dict) -> None:

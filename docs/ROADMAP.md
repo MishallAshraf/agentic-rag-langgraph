@@ -21,6 +21,7 @@ Each step builds on the previous one and maps to topics from the "Mastering AI s
 | 13 | Done | Authentication and authorization, per user and per bot | Retrieval access control; per-tenant quotas; audit logging |
 | 14 | Done | Multi-agent bots: a planner, parallel researchers over other bots' collections, a writer and a reviewer | Multi-agent orchestration; deep research case study |
 | 15 | Done | The bot builder in the web app: upload documents, follow the build, review and publish, without a restart | Background jobs and resumable streaming; file upload security; human-in-the-loop publishing |
+| 16 | Done | Improvement loop: a red team attacks a bot, a researcher finds production practice, an engineer proposes rules, an architect verifies them | Red-teaming and adversarial evaluation; regression testing; agent roles with code between them; model routing and fallbacks |
 
 ## Principles carried through every step
 

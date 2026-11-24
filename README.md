@@ -38,6 +38,8 @@ Step 14 is done: multi-agent bots. A research bot has no documents of its own: a
 
 Step 15 is done: the bot builder in the web app. An admin uploads documents and describes a use case; the builder runs as a background job whose progress survives a page reload; the admin reviews the proposed bot in its own colours and publishes it, and it is served at once without a restart.
 
+Step 16 is done: an improvement loop. A red-team agent attacks a bot with realistic tricky messages, a stronger model judges the replies, a researcher looks up how production systems handle each failure, an engineer proposes short rules, and an architect reruns the failures and earlier passes before a person approves. Its first runs also found that the guard, grader and fact check had been answered by the fallback model, which is now fixed.
+
 ## Setup
 
 Requires Python 3.11 on Windows (the pinned requirements include Windows-only packages; see [ADR 0004](docs/adr/0004-pin-all-dependency-versions.md)).
@@ -256,6 +258,18 @@ Uploads are checked before they are stored (type, real file content, size, safe 
 
 The builder uses `BUILDER_MODEL` (Sonnet 5.5 by default). If port 8000 is taken, run the API with `API_PORT=8001` and start Vite with the same variable. See [ADR 0020](docs/adr/0020-bot-builder-as-a-service.md).
 
+## Step 16: the improvement loop
+
+Run it on any bot with documents. `--dry-run` writes nothing and stops at the proposal:
+
+```bash
+.\.venv\Scripts\python.exe improve.py --bot bots/architecture_guide.yaml --dry-run
+.\.venv\Scripts\python.exe improve.py --bot bots/architecture_guide.yaml          # asks before applying
+.\.venv\Scripts\python.exe -m unittest tests.test_improve -v                       # no LLM needed
+```
+
+The red team runs 3 fixed attacks, about 6 generated ones aimed at the bot's own documents, and two of its suggested questions (a fix must not make it refuse those). Failing replies go to the researcher, who reads [docs/production_playbook.md](docs/production_playbook.md), then to the engineer, who may only add up to 3 one-sentence **learned rules** (checked by code). The architect reruns the failures and a regression sample on the changed bot. If you approve, the rules are added to the bot's file and each attack that broke it becomes a test in `evals/bots/<bot>.yaml`. Failures that need a code change, such as a guardrail misfire, are reported instead. A run costs about USD 0.05-0.20 and writes a report to `evals/results/`. See [ADR 0021](docs/adr/0021-improvement-loop-red-team-research-fix-verify.md).
+
 ## Project layout
 
 | Path | Contents |
@@ -296,6 +310,9 @@ The builder uses `BUILDER_MODEL` (Sonnet 5.5 by default). If port 8000 is taken,
 | `builds.py` | The builder as a background job: upload checks, progress events, review decision |
 | `tests/test_builds.py` | Tests for uploads, build progress, review and publishing, with a stand-in builder |
 | `tests/_env.py` | Shared test settings (a throwaway user database) for the API test suites |
+| `improve.py` | Improvement loop: red team, judge, researcher, engineer, architect, human approval |
+| `docs/production_playbook.md` | How production chatbots handle each kind of failure; the researcher's source |
+| `tests/test_improve.py` | Tests for the loop's decisions (fix, retry, reject, give up, apply), with stand-in models |
 | `frontend/` | Web app (React, TypeScript, Vite): bot list, themed chat, streaming, approvals |
 | `evals/golden.yaml` | Hand-checked test cases: questions, expected behaviour, key points, pages, rules |
 | `evals/run_evals.py` | Runs the cases through the agent and scores them; Langfuse experiments |

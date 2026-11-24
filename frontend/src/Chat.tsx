@@ -32,14 +32,24 @@ function saveThreadId(botId: string, id: string) {
 
 function describeError(e: unknown): string {
   if (e instanceof ApiError) {
-    if (e.status === 429) return `Too many messages. Try again in ${e.retryAfter ?? 60} seconds.`
+    // A rate limit says when to retry; a daily quota explains itself in the message.
+    if (e.status === 429 && e.retryAfter) return `Too many messages. Try again in ${e.retryAfter} seconds.`
     return e.message
   }
   if (e instanceof TypeError) return "Can't reach the server. Is api.py running?"
   return String(e)
 }
 
-export function Chat({ bot, onBack }: { bot: Bot; onBack: () => void }) {
+type Props = {
+  bot: Bot
+  onBack: () => void
+  onSignedOut: () => void // the session expired or was ended elsewhere
+  onTurnEnd: () => void // refresh usage figures
+}
+
+const isSignedOut = (e: unknown) => e instanceof ApiError && e.status === 401
+
+export function Chat({ bot, onBack, onSignedOut, onTurnEnd }: Props) {
   const [threadId, setThreadId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [live, setLive] = useState<Live | null>(null)
@@ -73,12 +83,16 @@ export function Chat({ bot, onBack }: { bot: Bot; onBack: () => void }) {
       saveThreadId(bot.id, id)
       setThreadId(id)
     }
-    open().catch((e) => !ignore && setError(describeError(e)))
+    open().catch((e) => {
+      if (ignore) return
+      if (isSignedOut(e)) onSignedOut()
+      else setError(describeError(e))
+    })
     return () => {
       ignore = true
       abortRef.current?.abort() // leaving mid-turn: the server repairs the conversation
     }
-  }, [bot.id])
+  }, [bot.id]) // eslint-disable-line react-hooks/exhaustive-deps -- open once per bot
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' })
@@ -131,10 +145,12 @@ export function Chat({ bot, onBack }: { bot: Bot; onBack: () => void }) {
       }
     } catch (e) {
       if (controller.signal.aborted) return
+      if (isSignedOut(e)) return onSignedOut()
       if (e instanceof ApiError) onRejected() // refused before it started: undo the optimistic update
       setError(describeError(e))
     } finally {
       if (abortRef.current === controller) setLive(null)
+      onTurnEnd()
     }
   }
 
@@ -167,7 +183,8 @@ export function Chat({ bot, onBack }: { bot: Bot; onBack: () => void }) {
       setPending(null)
       setError(null)
     } catch (e) {
-      setError(describeError(e))
+      if (isSignedOut(e)) onSignedOut()
+      else setError(describeError(e))
     }
   }
 

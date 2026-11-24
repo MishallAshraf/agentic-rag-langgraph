@@ -112,3 +112,30 @@ export function sendApproval(botId: string, threadId: string, decision: 'approve
                              onEvent: (e: TurnEvent) => void, signal?: AbortSignal) {
   return streamPost(`/bots/${botId}/threads/${threadId}/approval`, { decision }, onEvent, signal)
 }
+
+// ---------------------------------------------------------------- Step 13: signing in
+// The session lives in an HttpOnly cookie that scripts cannot read; the browser
+// sends it with every same-origin request, including the streamed ones above.
+
+export type Usage = { turns: number; tokens: number; turn_limit: number; token_limit: number }
+export type Me = { username: string; role: 'admin' | 'member'; usage: Usage }
+
+export async function login(username: string, password: string): Promise<Me> {
+  const res = await check(await fetch(`${BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  }))
+  return res.json()
+}
+
+export async function logout(): Promise<void> {
+  await fetch(`${BASE}/auth/logout`, { method: 'POST' })
+}
+
+/** The signed-in user, or null if there is no valid session. */
+export async function me(): Promise<Me | null> {
+  const res = await fetch(`${BASE}/auth/me`)
+  if (res.status === 401) return null
+  return (await check(res)).json()
+}

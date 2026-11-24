@@ -66,8 +66,15 @@ def check_policy(bot: BotConfig) -> list[str]:
     return problems
 
 
-def notes_dir(bot: BotConfig) -> Path:
-    return ROOT / "notes" / bot.id
+def notes_dir(bot: BotConfig, user: str | None = None) -> Path:
+    # Step 13: per user as well, so users of one bot cannot read each other's notes.
+    # The username is validated (auth.USERNAME_PATTERN), so it is safe as a folder name.
+    return ROOT / "notes" / bot.id / user if user else ROOT / "notes" / bot.id
+
+
+def uses_user_data(bot: BotConfig) -> bool:
+    """True if the bot's tools keep data per user, so each user needs their own tool set."""
+    return bool(MCP_TOOLS & set(bot.tools))
 
 
 def _local_tool(name: str, bot: BotConfig | None):
@@ -85,7 +92,7 @@ def _local_tool(name: str, bot: BotConfig | None):
     return None
 
 
-async def load_tools(names: list[str], bot: BotConfig | None = None) -> list:
+async def load_tools(names: list[str], bot: BotConfig | None = None, user: str | None = None) -> list:
     """Return the registered tools with these names, in the given order, made for this bot."""
     if bot is not None:
         problems = check_policy(bot)
@@ -99,7 +106,7 @@ async def load_tools(names: list[str], bot: BotConfig | None = None) -> list:
     if MCP_TOOLS & set(names):
         # "stdio": launch the server as a child process and talk over stdin/stdout.
         # NOTES_DIR gives each bot its own notes folder.
-        folder = notes_dir(bot) if bot else ROOT / "notes"
+        folder = notes_dir(bot, user) if bot else ROOT / "notes"
         server = {"command": sys.executable, "args": [str(ROOT / "mcp_servers" / "notes_server.py")],
                   "transport": "stdio", "env": {"NOTES_DIR": str(folder)}}
         mcp_tools = {t.name: t for t in await MultiServerMCPClient({"notes": server}).get_tools()}

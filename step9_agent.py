@@ -56,7 +56,8 @@ def build_graph(bot: BotConfig, tools: list, llm, checkpointer, guard_llm=None, 
     """make_assistant(hardened_bot) builds the graph inside the guardrails (Step 14 passes the
     research team); by default it is the Step 7 agent."""
     canary = new_canary()
-    hardened_bot = bot.model_copy(update={"system_prompt": with_canary(bot.system_prompt, canary)})
+    # Step 16: learned rules go before the canary, so they are part of the prompt it protects.
+    hardened_bot = bot.model_copy(update={"system_prompt": with_canary(bot.prompt_with_rules(), canary)})
     tool_node = ToolNode(tools, wrap_tool_call=mark_as_data, awrap_tool_call=amark_as_data)
     # Compiled without a checkpointer: as a subgraph it uses the parent's, so an
     # approval pause inside it is saved and resumed like any other.

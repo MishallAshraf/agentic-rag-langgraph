@@ -157,7 +157,7 @@ class AuthTests(unittest.TestCase):
         ids = lambda c: sorted(b["id"] for b in c.get("/bots").json())  # noqa: E731
         self.assertEqual(ids(self.alice), ["architecture_guide"])
         self.assertEqual(ids(self.bob), ["architecture_guide", "study_assistant"])
-        self.assertEqual(ids(self.root), ["architecture_guide", "study_assistant"])
+        self.assertEqual(ids(self.root), sorted(api.app.state.platform.bots))  # every bot
 
     def test_an_ungranted_bot_looks_like_a_missing_one(self):
         hidden = self.alice.get("/bots/study_assistant")

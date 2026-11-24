@@ -34,7 +34,9 @@ Step 12 is done: a web frontend (React, TypeScript, Vite). Pick a bot, and its c
 
 Step 13 is done: users and permissions. People sign in (bcrypt passwords, server-side sessions in an HttpOnly cookie); each member sees only the bots granted to them, and so only those bots' documents; conversations and notes are private to their owner; daily quotas cap messages and tokens per user; and every security-relevant event goes into a hash-chained audit log.
 
-Step 14 is done: multi-agent bots. A research bot has no documents of its own: a planner splits each question into sub-questions, researchers search other bots' collections in parallel, a writer combines their findings into one cited answer, and a reviewer sends it back once if a part is missing or a claim is unsupported. The team acts with the signed-in user's permissions, never more. All 14 steps of the roadmap are complete.
+Step 14 is done: multi-agent bots. A research bot has no documents of its own: a planner splits each question into sub-questions, researchers search other bots' collections in parallel, a writer combines their findings into one cited answer, and a reviewer sends it back once if a part is missing or a claim is unsupported. The team acts with the signed-in user's permissions, never more. 
+
+Step 15 is done: the bot builder in the web app. An admin uploads documents and describes a use case; the builder runs as a background job whose progress survives a page reload; the admin reviews the proposed bot in its own colours and publishes it, and it is served at once without a restart.
 
 ## Setup
 
@@ -242,6 +244,18 @@ It also runs in the terminal, and the graph can be printed without a model:
 
 Each user's team may only search the sources that user was granted (Step 13): the planner is told only about those, and each researcher checks again. A research turn costs about twice the tokens and time of a single-agent turn. The first live run sent a question to the wrong source because a source's description did not say what its documents cover: for a planner, the source descriptions are the routing prompt. See [ADR 0019](docs/adr/0019-multi-agent-research-team.md).
 
+## Step 15: the builder in the web app
+
+Sign in as an admin and choose **Create a bot** on the bot list. Give the bot an id, describe who it is for, and upload PDF, Word or Markdown files. The page shows each step as the builder works (index, survey, draft, checks, tests); you can leave and come back. When it is ready, review the bot as users will see it, with its system prompt and test questions, then approve or reject. An approved bot is live for admins at once; give members access with `manage_users.py grant <user> <bot id>`.
+
+Uploads are checked before they are stored (type, real file content, size, safe names) and kept in `documents/uploads/<bot id>/`, which is not committed. The tests use a stand-in builder, so they need no LLM:
+
+```bash
+.\.venv\Scripts\python.exe -m unittest tests.test_builds tests.test_auth tests.test_research -v
+```
+
+The builder uses `BUILDER_MODEL` (Sonnet 5.5 by default). If port 8000 is taken, run the API with `API_PORT=8001` and start Vite with the same variable. See [ADR 0020](docs/adr/0020-bot-builder-as-a-service.md).
+
 ## Project layout
 
 | Path | Contents |
@@ -279,6 +293,9 @@ Each user's team may only search the sources that user was granted (Step 13): th
 | `step14_research.py` | Multi-agent research team: planner, parallel researchers, writer, reviewer |
 | `bots/research_assistant.yaml` | A research bot over the study assistant's and the design guide's documents |
 | `tests/test_research.py` | Tests for the team's control flow and permissions, with a scripted model |
+| `builds.py` | The builder as a background job: upload checks, progress events, review decision |
+| `tests/test_builds.py` | Tests for uploads, build progress, review and publishing, with a stand-in builder |
+| `tests/_env.py` | Shared test settings (a throwaway user database) for the API test suites |
 | `frontend/` | Web app (React, TypeScript, Vite): bot list, themed chat, streaming, approvals |
 | `evals/golden.yaml` | Hand-checked test cases: questions, expected behaviour, key points, pages, rules |
 | `evals/run_evals.py` | Runs the cases through the agent and scores them; Langfuse experiments |

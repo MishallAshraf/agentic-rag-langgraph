@@ -20,6 +20,7 @@ In development, Vite forwards `/api/*` to the API on `127.0.0.1:8000` (see `vite
 | `src/Login.tsx` | Sign-in form (accounts are created with `manage_users.py`) |
 | `src/Chat.tsx` | The conversation: streaming, draft preview, steps, sources, approval card |
 | `src/steps.ts` | Status events as readable steps |
+| `src/Builder.tsx` | Step 15: create a bot (admins): upload, follow the build, review and publish |
 | `src/Avatar.tsx` | The avatar icons a bot can choose |
 | `src/index.css` | Styles. Each bot's colour enters as one variable, `--primary` |
 

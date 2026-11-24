@@ -34,6 +34,8 @@ Step 12 is done: a web frontend (React, TypeScript, Vite). Pick a bot, and its c
 
 Step 13 is done: users and permissions. People sign in (bcrypt passwords, server-side sessions in an HttpOnly cookie); each member sees only the bots granted to them, and so only those bots' documents; conversations and notes are private to their owner; daily quotas cap messages and tokens per user; and every security-relevant event goes into a hash-chained audit log.
 
+Step 14 is done: multi-agent bots. A research bot has no documents of its own: a planner splits each question into sub-questions, researchers search other bots' collections in parallel, a writer combines their findings into one cited answer, and a reviewer sends it back once if a part is missing or a claim is unsupported. The team acts with the signed-in user's permissions, never more. All 14 steps of the roadmap are complete.
+
 ## Setup
 
 Requires Python 3.11 on Windows (the pinned requirements include Windows-only packages; see [ADR 0004](docs/adr/0004-pin-all-dependency-versions.md)).
@@ -226,6 +228,20 @@ Then start the API and the frontend as in Steps 11 and 12 and sign in. `manage_u
 
 Conversations started before Step 13 have no owner, so the API does not show them; the terminal agents (`step9_agent.py`) still can. See [ADR 0018](docs/adr/0018-authentication-authorization-quotas-audit.md).
 
+## Step 14: multi-agent research
+
+`bots/research_assistant.yaml` is a research bot: its `research` section names the bots whose collections it may search, how many sub-questions a turn may have and how many review rounds. Start the API and the frontend as before, choose the Research Assistant and ask a question that spans the course and the design records, such as its first suggested question. The steps beside the draft show the plan, each researcher's result and the review.
+
+It also runs in the terminal, and the graph can be printed without a model:
+
+```bash
+.\.venv\Scripts\python.exe step14_research.py
+.\.venv\Scripts\python.exe step14_research.py --graph     # Mermaid diagram
+.\.venv\Scripts\python.exe -m unittest tests.test_research -v
+```
+
+Each user's team may only search the sources that user was granted (Step 13): the planner is told only about those, and each researcher checks again. A research turn costs about twice the tokens and time of a single-agent turn. The first live run sent a question to the wrong source because a source's description did not say what its documents cover: for a planner, the source descriptions are the routing prompt. See [ADR 0019](docs/adr/0019-multi-agent-research-team.md).
+
 ## Project layout
 
 | Path | Contents |
@@ -260,6 +276,9 @@ Conversations started before Step 13 have no owner, so the API does not show the
 | `auth.py` | Users, sessions, bot grants, conversation owners, quotas, hash-chained audit log |
 | `manage_users.py` | Command line for users, grants and the audit log |
 | `tests/test_auth.py` | Tests for sign-in, access rules, quotas and the audit chain |
+| `step14_research.py` | Multi-agent research team: planner, parallel researchers, writer, reviewer |
+| `bots/research_assistant.yaml` | A research bot over the study assistant's and the design guide's documents |
+| `tests/test_research.py` | Tests for the team's control flow and permissions, with a scripted model |
 | `frontend/` | Web app (React, TypeScript, Vite): bot list, themed chat, streaming, approvals |
 | `evals/golden.yaml` | Hand-checked test cases: questions, expected behaviour, key points, pages, rules |
 | `evals/run_evals.py` | Runs the cases through the agent and scores them; Langfuse experiments |

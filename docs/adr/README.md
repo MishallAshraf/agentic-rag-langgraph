@@ -22,6 +22,7 @@ An ADR records one significant decision: the context, what was decided, the alte
 | [0016](0016-fastapi-with-server-sent-events.md) | FastAPI with Server-Sent Events; streamed tokens are a preview, the final event is the answer | Accepted |
 | [0017](0017-react-frontend-themed-per-bot.md) | React frontend: one theme variable per bot, drafts shown as drafts, approvals as cards, no HTML from the model | Accepted |
 | [0018](0018-authentication-authorization-quotas-audit.md) | Server-side sessions, per-bot grants, private conversations, daily quotas, hash-chained audit log | Accepted |
+| [0019](0019-multi-agent-research-team.md) | Multi-agent research bots: planner, parallel researchers, writer, one review round; agents act with the user's permissions | Accepted |
 
 Statuses: **Proposed** (under discussion), **Accepted**, **Superseded by NNNN** (replaced by a later decision; the old record is kept, not edited).
 

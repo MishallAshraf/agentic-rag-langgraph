@@ -19,7 +19,7 @@ Each step builds on the previous one and maps to topics from the "Mastering AI s
 | 11 | Done | Backend API (FastAPI, streaming over Server-Sent Events) | API design; streaming; rate limiting; latency budgets |
 | 12 | Done | React frontend (Vite, React, TypeScript), themed per bot | Streaming UX; showing sources and agent steps; human approval UI |
 | 13 | Done | Authentication and authorization, per user and per bot | Retrieval access control; per-tenant quotas; audit logging |
-| 14 | Next | Multi-agent bots | Multi-agent orchestration; deep research case study |
+| 14 | Done | Multi-agent bots: a planner, parallel researchers over other bots' collections, a writer and a reviewer | Multi-agent orchestration; deep research case study |
 
 ## Principles carried through every step
 

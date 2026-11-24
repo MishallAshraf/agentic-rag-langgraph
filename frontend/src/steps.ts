@@ -26,6 +26,18 @@ export function describeStep(e: StatusEvent): string | null {
         : 'The answer failed the fact check; writing it again'
     case 'output_guard':
       return 'Reply replaced by the output check'
+    // Step 14: the research team
+    case 'plan': {
+      const tasks = (e.tasks ?? []) as { question: string; source: string }[]
+      return `Planned ${tasks.length} research ${tasks.length === 1 ? 'task' : 'tasks'}: ` +
+        tasks.map((t) => `"${t.question}" (${t.source})`).join('; ')
+    }
+    case 'research':
+      return `${e.found ? 'Found' : 'Found nothing'} in ${e.source}: "${e.question}"`
+    case 'review':
+      return e.result === 'approved' ? 'Reviewer approved the answer'
+        : e.result === 'more_research' ? 'Reviewer found gaps; researching them'
+        : 'Reviewer found unsupported claims; rewriting'
     default:
       return null
   }

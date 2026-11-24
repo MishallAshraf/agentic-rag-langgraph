@@ -62,6 +62,7 @@ from pydantic import BaseModel, Field
 from sse_starlette import EventSourceResponse, ServerSentEvent
 
 import step9_agent
+import step14_research
 from auth import SESSION_TTL_S, AuthStore, User
 from bot_config import BotConfig, Theme, load_bot
 from step5_agent import CHECKPOINT_DB
@@ -82,6 +83,7 @@ COOKIE_NAME = "session"
 COOKIE_SECURE = os.getenv("API_COOKIE_SECURE", "false").lower() == "true"  # true behind HTTPS
 THREAD_PATTERN = re.compile(r"^[a-f0-9]{32}$")
 SOURCE_PATTERN = re.compile(r"^\[\d+\] (.+)$", re.MULTILINE)  # "[1] file, page 4" in search results
+ANSWER_NODES = {"agent", "write"}  # nodes whose model output is the answer (Step 7 agent, Step 14 writer)
 
 
 # ------------------------------------------------------------------ bots and their graphs
@@ -116,8 +118,12 @@ class Platform:
         key = user.username if uses_user_data(entry.config) else ""
         async with entry.build_lock:
             if key not in entry.graphs:
-                tools = await load_tools(entry.config.tools, entry.config, user=key or None)
-                entry.graphs[key] = step9_agent.build_graph(entry.config, tools, self.llm, self.checkpointer)
+                if entry.config.research:  # Step 14: a research team over other bots' documents
+                    bots = {bot_id: e.config for bot_id, e in self.bots.items()}
+                    entry.graphs[key] = step14_research.build_graph(entry.config, bots, self.llm, self.checkpointer)
+                else:
+                    tools = await load_tools(entry.config.tools, entry.config, user=key or None)
+                    entry.graphs[key] = step9_agent.build_graph(entry.config, tools, self.llm, self.checkpointer)
         return entry.graphs[key]
 
 
@@ -245,6 +251,17 @@ async def own_thread(request: Request, user: User, bot_id: str, thread_id: str):
     raise HTTPException(404, "No such conversation")
 
 
+async def config_for(request: Request, user: User, entry: BotEntry, thread_id: str) -> dict:
+    """The graph config for this user's turn. A research bot gets the sources this user may read,
+    so its agents act with the user's permissions, never more (Step 14)."""
+    config = step9_agent.turn_config(entry.config, thread_id)
+    if entry.config.research:
+        auth = request.app.state.auth
+        allowed = [s for s in entry.config.research.sources if await auth.can_use(user, s)]
+        config["configurable"] = {**config["configurable"], "allowed_sources": allowed}
+    return config
+
+
 def rate_limit(request: Request, user: User):
     wait = request.app.state.limiter.retry_after(user.username)
     if wait:
@@ -267,8 +284,13 @@ async def pending_approval(graph, config) -> dict | None:
 
 
 def sources_in(messages) -> list[str]:
-    return sorted({s.strip() for m in messages if isinstance(m, ToolMessage) and m.name in SOURCE_TOOLS
-                   for s in SOURCE_PATTERN.findall(m.text)})
+    found = {s.strip() for m in messages if isinstance(m, ToolMessage) and m.name in SOURCE_TOOLS
+             for s in SOURCE_PATTERN.findall(m.text)}
+    # A research answer carries its sources itself (Step 14: the writer never calls tools).
+    for m in messages:
+        if isinstance(m, AIMessage):
+            found.update(m.response_metadata.get("sources", []))
+    return sorted(found)
 
 
 def event(name: str, data: dict) -> ServerSentEvent:
@@ -295,6 +317,17 @@ def describe(node: str, update) -> list[ServerSentEvent]:
                                  "result": "revising" if update.get("feedback") else "supported"})]
     if node == "guard_output" and update.get("guard"):
         return [event("status", {"stage": "output_guard", "result": "blocked"})]
+    # Step 14: the research team
+    if node == "plan" and update.get("tasks"):
+        return [event("status", {"stage": "plan", "tasks": [{"question": t["question"], "source": t["source_name"]}
+                                                            for t in update["tasks"]]})]
+    if node == "research" and update.get("findings"):
+        f = update["findings"][0]
+        return [event("status", {"stage": "research", "question": f["question"], "source": f["source_name"],
+                                 "found": f["answered"]})]
+    if node == "review" and "rounds" in update:
+        result = "more_research" if update.get("tasks") else "rewrite" if "feedback" in update else "approved"
+        return [event("status", {"stage": "review", "result": result})]
     return []
 
 
@@ -327,7 +360,7 @@ async def stream_turn(graph, config, graph_input, lock: asyncio.Lock, on_end):
                         if mode == "messages":
                             chunk, meta = data
                             # Only the answering model; not the guard, grader or fact checker.
-                            if meta.get("langgraph_node") == "agent" and isinstance(chunk, AIMessageChunk) \
+                            if meta.get("langgraph_node") in ANSWER_NODES and isinstance(chunk, AIMessageChunk) \
                                     and chunk.text:
                                 yield event("token", {"message_id": chunk.id, "text": chunk.text})
                             continue
@@ -449,7 +482,7 @@ async def get_thread(request: Request, bot_id: str, thread_id: str, user: User =
     entry = await bot_for(request, user, bot_id)
     await own_thread(request, user, bot_id, thread_id)
     graph = await request.app.state.platform.graph_for(entry, user)
-    config = step9_agent.turn_config(entry.config, thread_id)
+    config = await config_for(request, user, entry, thread_id)
     state = (await graph.aget_state(config)).values
     messages, turn = [], []  # turn: the tool results since the last user message
     for m in state.get("messages", []):
@@ -459,7 +492,7 @@ async def get_thread(request: Request, bot_id: str, thread_id: str, user: User =
         elif isinstance(m, ToolMessage):
             turn.append(m)
         elif isinstance(m, AIMessage) and not m.tool_calls and m.text:
-            messages.append(ChatMessage(role="assistant", text=m.text, sources=sources_in(turn)))
+            messages.append(ChatMessage(role="assistant", text=m.text, sources=sources_in(turn + [m])))
     return ThreadOut(thread_id=thread_id, messages=messages,
                      pending_approval=await pending_approval(graph, config))
 
@@ -472,7 +505,7 @@ async def send_message(request: Request, bot_id: str, thread_id: str, body: Mess
     rate_limit(request, user)
     await check_quota(request, user, bot_id)
     graph = await platform.graph_for(entry, user)
-    config = step9_agent.turn_config(entry.config, thread_id)
+    config = await config_for(request, user, entry, thread_id)
     lock = platform.thread_locks[f"{bot_id}:{thread_id}"]
     if lock.locked():
         raise HTTPException(409, "A reply in this conversation is still being written.")
@@ -494,7 +527,7 @@ async def send_approval(request: Request, bot_id: str, thread_id: str, body: App
     await own_thread(request, user, bot_id, thread_id)
     rate_limit(request, user)
     graph = await platform.graph_for(entry, user)
-    config = step9_agent.turn_config(entry.config, thread_id)
+    config = await config_for(request, user, entry, thread_id)
     lock = platform.thread_locks[f"{bot_id}:{thread_id}"]
     if lock.locked():
         raise HTTPException(409, "A reply in this conversation is still being written.")

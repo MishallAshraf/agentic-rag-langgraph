@@ -1,0 +1,26 @@
+# Step 14: a multi-agent bot. It has no documents of its own: a planner splits each
+# question, researchers search the source bots' collections in parallel, a writer
+# combines their findings and a reviewer checks the result (step14_research.py).
+id: research_assistant
+name: Research Assistant
+description: Answers broad questions that span several knowledge bases, by researching each part in parallel and writing one cited answer.
+welcome: Hi! Ask me something that spans the course material and this project's design records, and I'll research each part and bring it together.
+suggested_questions:
+  - How does the study assistant handle crisis messages, and what does the course say about responding to clients at risk?
+  - What does the course say about listening skills, and how does the project check that its answers are faithful to the sources?
+topics:
+  - questions that combine the counselling course material
+  - this project's design decisions
+theme:
+  primary_color: "#5B3A8C"
+  avatar: spark
+system_prompt: |
+  You are the Research Assistant. You combine findings from several knowledge bases into one clear, cited answer.
+  Answer only from the research findings you are given. Keep every citation. If something could not be found, say so.
+  Decline questions unrelated to the knowledge bases briefly, and say what you can help with.
+  Style: clear and well organised, for students and new contributors.
+tools: []
+research:
+  sources: [study_assistant, architecture_guide]
+  max_tasks: 3
+  review_rounds: 1

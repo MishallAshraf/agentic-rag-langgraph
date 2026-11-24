@@ -74,6 +74,7 @@ Other consequences:
   - before the fix: 66 of 75 correct, all 9 errors pushy customers classed as injection
   - after: 99 of 99, including 8 held-out cases written after the fix
   - in a fourth loop run, the manipulation attack was answered by the bot, and the loop moved on to a privacy failure it could fix with a rule
+- Testing the applied fix exposed a bug in the Step 8 runner: Langfuse item ids must be unique across all datasets, and every generated bot's tests start at `gen-1`, so a second bot's evaluation stopped with a conflict. Items are now `<dataset>.<case id>` (`evals/common.langfuse_item_id`), and the study assistant keeps its plain ids so its run history stays linked. Results map back to YAML ids through the item's `case_id` metadata.
 - Revisit:
   - to support research bots (their sources are other bots)
   - to run the loop from the admin page as a background job, like builds (ADR 0020)

@@ -314,6 +314,7 @@ The red team runs 3 fixed attacks, about 6 generated ones aimed at the bot's own
 | `docs/production_playbook.md` | How production chatbots handle each kind of failure; the researcher's source |
 | `evals/check_guard.py`, `evals/guard_cases.yaml` | Live check of the input guardrail on labelled messages (injection, crisis, pushy but ok) |
 | `tests/test_guardrails.py` | Tests for the input guardrail's code paths and the case file, with a stand-in classifier |
+| `tests/test_eval_ids.py` | Tests that every bot's eval dataset can be synced to Langfuse without id clashes |
 | `tests/test_improve.py` | Tests for the loop's decisions (fix, retry, reject, give up, apply), with stand-in models |
 | `frontend/` | Web app (React, TypeScript, Vite): bot list, themed chat, streaming, approvals |
 | `evals/golden.yaml` | Hand-checked test cases: questions, expected behaviour, key points, pages, rules |

@@ -168,6 +168,7 @@ class ApprovalIn(BaseModel):
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant"]
     text: str
+    sources: list[str] = []  # for an answer: what its turn retrieved
 
 
 class ThreadOut(BaseModel):
@@ -203,6 +204,11 @@ async def pending_approval(graph, config) -> dict | None:
     return interrupts[0].value if interrupts else None
 
 
+def sources_in(messages) -> list[str]:
+    return sorted({s.strip() for m in messages if isinstance(m, ToolMessage) and m.name in SOURCE_TOOLS
+                   for s in SOURCE_PATTERN.findall(m.text)})
+
+
 def event(name: str, data: dict) -> ServerSentEvent:
     return ServerSentEvent(event=name, data=json.dumps(data, ensure_ascii=False))
 
@@ -234,8 +240,7 @@ async def final_event(graph, config) -> ServerSentEvent:
     state = (await graph.aget_state(config)).values
     turn = current_turn(state["messages"])
     answer = next((m.text for m in reversed(turn) if isinstance(m, AIMessage) and not m.tool_calls), "")
-    sources = sorted({s.strip() for m in turn if isinstance(m, ToolMessage) and m.name in SOURCE_TOOLS
-                      for s in SOURCE_PATTERN.findall(m.text)})
+    sources = sources_in(turn)
     return event("done", {"answer": answer, "sources": sources,
                           "guard": (state.get("guard") or "ok").split(":")[0]})
 
@@ -308,12 +313,15 @@ async def get_thread(request: Request, bot_id: str, thread_id: str):
     graph = await platform.graph_for(entry)
     config = step9_agent.turn_config(entry.config, thread_id)
     state = (await graph.aget_state(config)).values
-    messages = []
+    messages, turn = [], []  # turn: the tool results since the last user message
     for m in state.get("messages", []):
         if isinstance(m, HumanMessage):
             messages.append(ChatMessage(role="user", text=m.text))
+            turn = []
+        elif isinstance(m, ToolMessage):
+            turn.append(m)
         elif isinstance(m, AIMessage) and not m.tool_calls and m.text:
-            messages.append(ChatMessage(role="assistant", text=m.text))
+            messages.append(ChatMessage(role="assistant", text=m.text, sources=sources_in(turn)))
     return ThreadOut(thread_id=thread_id, messages=messages,
                      pending_approval=await pending_approval(graph, config))
 

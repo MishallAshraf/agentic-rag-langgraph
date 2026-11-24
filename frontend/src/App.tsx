@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react'
 import { ApiError, listBots, logout, me, REPLAY } from './api'
 import type { Bot, Me } from './api'
 import { Avatar } from './Avatar'
+import { Builder } from './Builder'
 import { Chat } from './Chat'
 import { Login } from './Login'
 
@@ -13,11 +14,18 @@ function botFromHash(): string | null {
   return match ? match[1] : null
 }
 
+// Step 15: #/build is the builder form, #/build/<id> one build. undefined: not the builder.
+function buildFromHash(): string | null | undefined {
+  const match = window.location.hash.match(/^#\/build(?:\/([a-f0-9]{32}))?$/)
+  return match ? (match[1] ?? null) : undefined
+}
+
 export default function App() {
   const [user, setUser] = useState<Me | null | undefined>(undefined) // undefined: still checking
   const [bots, setBots] = useState<Bot[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [botId, setBotId] = useState<string | null>(botFromHash)
+  const [buildId, setBuildId] = useState<string | null | undefined>(buildFromHash)
 
   function signedOut() {
     setUser(null)
@@ -60,7 +68,7 @@ export default function App() {
 
   useEffect(() => {
     start()
-    const onHash = () => setBotId(botFromHash())
+    const onHash = () => { setBotId(botFromHash()); setBuildId(buildFromHash()) }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
@@ -81,6 +89,9 @@ export default function App() {
   }
   if (user === null) return <Login onSignedIn={onSignedIn} />
   if (user === undefined || !bots) return <div className="page"><p className="muted">Loading…</p></div>
+  if (buildId !== undefined && user.role === 'admin') {
+    return <Builder buildId={buildId} onBotSaved={fetchBots} onSignedOut={signedOut} />
+  }
   if (bot) {
     return <Chat key={bot.id} bot={bot} onBack={() => { window.location.hash = '' }}
                  onSignedOut={signedOut} onTurnEnd={refreshUsage} />
@@ -106,7 +117,10 @@ export default function App() {
             {user.role === 'admin' && <span className="badge">admin</span>}
           </span>
           <span className="muted small">Today: {usage.turns} of {usage.turn_limit} messages</span>
-          <button className="ghost" onClick={signOut}>Sign out</button>
+          <span className="account-actions">
+            {user.role === 'admin' && <a className="button primary" href="#/build">Create a bot</a>}
+            <button className="ghost" onClick={signOut}>Sign out</button>
+          </span>
         </div>
         )}
       </header>

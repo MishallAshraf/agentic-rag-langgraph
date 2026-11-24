@@ -10,7 +10,8 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        // API_PORT is the same setting api.py reads, for when 8000 is taken.
+        target: `http://127.0.0.1:${process.env.API_PORT ?? '8000'}`,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },

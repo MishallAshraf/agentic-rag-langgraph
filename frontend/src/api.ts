@@ -150,3 +150,69 @@ export async function me(): Promise<Me | null> {
   if (res.status === 401) return null
   return (await check(res)).json()
 }
+
+// ---------------------------------------------------------------- Step 15: building bots (admins)
+// A build is a job on the server: start it with an upload, follow its events,
+// then approve or reject the proposal. Reloading the page loses nothing.
+
+export type BuildStatus = 'running' | 'review' | 'deciding' | 'saved' | 'rejected' | 'failed'
+export type BuildEvent = { n: number; stage: string; status: BuildStatus; message?: string;
+                           files?: number; problems?: string[] }
+export type BuildSummary = { id: string; bot_id: string; status: BuildStatus; by: string; started: number;
+                             files: string[]; use_case: string }
+export type BotProposal = Bot & {
+  system_prompt: string
+  tools: string[]
+  approval_required: string[]
+  knowledge: { folder: string; collection: string; subject: string }
+}
+export type TestCase = { id: string; category?: string; turns: string[]; expected_behaviour?: string }
+export type Proposal = { config: BotProposal; tests: TestCase[]; log: string[] }
+export type BuildDetail = BuildSummary & { events: BuildEvent[]; proposal: Proposal | null; problems: string[];
+                                           saved: string[] }
+
+/** The same limits as builds.py, checked here first so mistakes show before a long upload. */
+export const BUILD_LIMITS = { files: 20, fileMB: 20, totalMB: 60, types: ['.pdf', '.docx', '.md'],
+                              useCase: [20, 1000], id: /^[a-z][a-z0-9_]{2,39}$/ }
+
+export async function startBuild(botId: string, useCase: string, files: File[]): Promise<BuildSummary> {
+  const form = new FormData()
+  form.append('bot_id', botId)
+  form.append('use_case', useCase)
+  for (const f of files) form.append('files', f, f.name)
+  // No Content-Type header: the browser sets multipart/form-data with its boundary.
+  return (await check(await fetch(`${BASE}/admin/builds`, { method: 'POST', body: form }))).json()
+}
+
+export async function listBuilds(): Promise<BuildSummary[]> {
+  return (await check(await fetch(`${BASE}/admin/builds`))).json()
+}
+
+export async function getBuild(id: string): Promise<BuildDetail> {
+  return (await check(await fetch(`${BASE}/admin/builds/${id}`))).json()
+}
+
+export async function decideBuild(id: string, decision: 'approve' | 'reject'): Promise<BuildDetail> {
+  return (await check(await fetch(`${BASE}/admin/builds/${id}/decision`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ decision }),
+  }))).json()
+}
+
+/**
+ * Follow a build's progress. A GET stream, so the browser's own EventSource
+ * works: it reconnects by itself and sends Last-Event-ID, and the server
+ * continues after that event. Returns a function that stops following.
+ */
+export function followBuild(id: string, after: number, onEvent: (e: BuildEvent) => void,
+                            onEnd: () => void): () => void {
+  const source = new EventSource(`${BASE}/admin/builds/${id}/events?after=${after}`)
+  source.addEventListener('build', (e) => onEvent(JSON.parse((e as MessageEvent).data)))
+  // The server closes the stream when the build stops running; without close()
+  // EventSource would treat that as a dropped connection and reconnect forever.
+  source.addEventListener('end', () => { source.close(); onEnd() })
+  // A refused stream (signed out, unknown build) is not retried by the browser: reload the state instead.
+  source.onerror = () => { if (source.readyState === EventSource.CLOSED) onEnd() }
+  return () => source.close()
+}

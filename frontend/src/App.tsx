@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { ApiError, listBots, logout, me } from './api'
+import { ApiError, listBots, logout, me, REPLAY } from './api'
 import type { Bot, Me } from './api'
 import { Avatar } from './Avatar'
 import { Chat } from './Chat'
@@ -94,6 +94,12 @@ export default function App() {
           <h1>Bots</h1>
           <p className="muted">Each bot answers only from its own documents.</p>
         </div>
+        {REPLAY ? (
+        <div className="account">
+          <span className="muted small">Replay demo: real answers recorded from the running app</span>
+          <a className="small" href="https://github.com/MishallAshraf/agentic-rag-langgraph">Source on GitHub</a>
+        </div>
+        ) : (
         <div className="account">
           <span>
             Signed in as <strong>{user.username}</strong>
@@ -102,6 +108,7 @@ export default function App() {
           <span className="muted small">Today: {usage.turns} of {usage.turn_limit} messages</span>
           <button className="ghost" onClick={signOut}>Sign out</button>
         </div>
+        )}
       </header>
       {botId && !bot && <div className="alert" role="alert">No bot called "{botId}" for this account.</div>}
       {bots.length === 0 && <p className="muted">No bots have been shared with you yet. Ask an administrator.</p>}

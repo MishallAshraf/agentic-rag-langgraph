@@ -1,0 +1,1633 @@
+{
+ "recorded_at": "2026-11-24",
+ "bots": [
+  {
+   "id": "architecture_guide",
+   "name": "Design Decisions Guide",
+   "description": "Explains why this RAG project is built the way it is, covering the decisions made, the alternatives rejected and the measurements taken, for new contributors and AI system design students.",
+   "welcome": "Hi! Ask me why this RAG project was built the way it was, which alternatives were rejected, and what the measurements showed.",
+   "suggested_questions": [
+    "Why was Chroma kept as the vector store even after hybrid retrieval was added?",
+    "Why did hybrid search without reranking perform worse than keyword search alone?",
+    "Why did the project choose Langfuse over LangSmith for evaluation?"
+   ],
+   "topics": [
+    "Vector store and embeddings",
+    "Chunking and hybrid retrieval",
+    "Graded retrieval and answer checking",
+    "Evaluation harness and Langfuse",
+    "Guardrails (crisis and injection handling) and human approval",
+    "Reliability, cost and caching"
+   ],
+   "theme": {
+    "primary_color": "#1F4E79",
+    "avatar": "compass"
+   }
+  }
+ ],
+ "turns": {
+  "architecture_guide|Why was Chroma kept as the vector store even after hybrid retrieval was added?": [
+   {
+    "t": 0.0,
+    "type": "status",
+    "data": {
+     "stage": "received"
+    }
+   },
+   {
+    "t": 2.234,
+    "type": "status",
+    "data": {
+     "stage": "guard",
+     "result": "ok"
+    }
+   },
+   {
+    "t": 4.75,
+    "type": "status",
+    "data": {
+     "stage": "tool_call",
+     "name": "search_knowledge",
+     "args": {
+      "question": "Why was Chroma kept as the vector store even after hybrid retrieval was added?",
+      "query": "Chroma vector store kept after hybrid retrieval added"
+     }
+    }
+   },
+   {
+    "t": 9.984,
+    "type": "status",
+    "data": {
+     "stage": "tool_result",
+     "name": "search_knowledge"
+    }
+   },
+   {
+    "t": 12.765,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "ADR 0010 k"
+    }
+   },
+   {
+    "t": 12.797,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "ept Chroma as the v"
+    }
+   },
+   {
+    "t": 12.953,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "ector store when"
+    }
+   },
+   {
+    "t": 12.953,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " it"
+    }
+   },
+   {
+    "t": 12.953,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " added hybrid retrie"
+    }
+   },
+   {
+    "t": 12.968,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "val and"
+    }
+   },
+   {
+    "t": 12.968,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " reranking. The decision did"
+    }
+   },
+   {
+    "t": 12.968,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " not repl"
+    }
+   },
+   {
+    "t": 12.968,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "ace Chroma with"
+    }
+   },
+   {
+    "t": 12.968,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " a"
+    }
+   },
+   {
+    "t": 13.172,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " store"
+    }
+   },
+   {
+    "t": 13.172,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " that handles keyword search."
+    }
+   },
+   {
+    "t": 13.172,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " Instead, the project keeps"
+    }
+   },
+   {
+    "t": 13.172,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " Chroma for vector search and"
+    }
+   },
+   {
+    "t": 13.172,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " run"
+    }
+   },
+   {
+    "t": 13.187,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "s BM25 keyword"
+    }
+   },
+   {
+    "t": 13.187,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " search in Python over the same ch"
+    }
+   },
+   {
+    "t": 13.187,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "unks, built in memory at"
+    }
+   },
+   {
+    "t": 13.375,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " start-up."
+    }
+   },
+   {
+    "t": 13.375,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " Vector and"
+    }
+   },
+   {
+    "t": 13.375,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " keyword results are merged with"
+    }
+   },
+   {
+    "t": 13.375,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " Reciprocal R"
+    }
+   },
+   {
+    "t": 13.375,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "ank Fusion, and the"
+    }
+   },
+   {
+    "t": 13.375,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " top 10 candidates are"
+    }
+   },
+   {
+    "t": 13.375,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " reranked by a cross-"
+    }
+   },
+   {
+    "t": 13.375,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "encoder (`Xen"
+    }
+   },
+   {
+    "t": 13.547,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "ova/ms-marco-"
+    }
+   },
+   {
+    "t": 13.547,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "MiniLM-L-"
+    }
+   },
+   {
+    "t": 13.547,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "6-v2` via fast"
+    }
+   },
+   {
+    "t": 13.547,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "embed). (0010-h"
+    }
+   },
+   {
+    "t": 13.547,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "ybrid-retrieval"
+    }
+   },
+   {
+    "t": 13.547,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "-with-reranking.md"
+    }
+   },
+   {
+    "t": 13.547,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": ", section \"Decision\")"
+    }
+   },
+   {
+    "t": 13.562,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "\n\nThe ret"
+    }
+   },
+   {
+    "t": 13.718,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "ained"
+    }
+   },
+   {
+    "t": 13.718,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " vector store is"
+    }
+   },
+   {
+    "t": 13.718,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " the"
+    }
+   },
+   {
+    "t": 13.718,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " original choice from ADR "
+    }
+   },
+   {
+    "t": 13.734,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "0001, which "
+    }
+   },
+   {
+    "t": 13.734,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "ADR 0010 expl"
+    }
+   },
+   {
+    "t": 13.734,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "icitly revisits and ke"
+    }
+   },
+   {
+    "t": 13.734,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "eps. (0001-ch"
+    }
+   },
+   {
+    "t": 13.89,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "roma-as-vector-"
+    }
+   },
+   {
+    "t": 13.89,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "store.md, section \"0001"
+    }
+   },
+   {
+    "t": 13.89,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": ". Chroma as the v"
+    }
+   },
+   {
+    "t": 13.89,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "ector store\""
+    }
+   },
+   {
+    "t": 13.89,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "; 0010-hybr"
+    }
+   },
+   {
+    "t": 13.89,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "id-retrieval-with"
+    }
+   },
+   {
+    "t": 13.89,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "-reranking.md, section"
+    }
+   },
+   {
+    "t": 13.89,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " \"0010. Clea"
+    }
+   },
+   {
+    "t": 14.062,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "ner parsing, hybr"
+    }
+   },
+   {
+    "t": 14.062,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "id retrieval and reran"
+    }
+   },
+   {
+    "t": 14.062,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "king; keep Chroma"
+    }
+   },
+   {
+    "t": 14.062,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "\")\n\nThe excerpts I"
+    }
+   },
+   {
+    "t": 14.062,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " retrieved state"
+    }
+   },
+   {
+    "t": 14.062,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " the decision but"
+    }
+   },
+   {
+    "t": 14.062,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " do not spell out the full"
+    }
+   },
+   {
+    "t": 14.062,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " reasoning for keeping"
+    }
+   },
+   {
+    "t": 14.234,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " Chroma, such as the"
+    }
+   },
+   {
+    "t": 14.234,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " al"
+    }
+   },
+   {
+    "t": 14.234,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "ternatives consid"
+    }
+   },
+   {
+    "t": 14.234,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "ered or the"
+    }
+   },
+   {
+    "t": 14.234,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " specific cost of"
+    }
+   },
+   {
+    "t": 14.25,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " swit"
+    }
+   },
+   {
+    "t": 14.25,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "ching. For"
+    }
+   },
+   {
+    "t": 14.25,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " that, read"
+    }
+   },
+   {
+    "t": 14.406,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " the \""
+    }
+   },
+   {
+    "t": 14.422,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "Context\" and \"Altern"
+    }
+   },
+   {
+    "t": 14.422,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "atives\" sections of AD"
+    }
+   },
+   {
+    "t": 14.422,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "R 0010 "
+    }
+   },
+   {
+    "t": 14.422,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "directly. One related design"
+    }
+   },
+   {
+    "t": 14.422,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " cho"
+    }
+   },
+   {
+    "t": 14.422,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "ice is"
+    }
+   },
+   {
+    "t": 14.422,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " also"
+    }
+   },
+   {
+    "t": 14.578,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " visible: "
+    }
+   },
+   {
+    "t": 14.578,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "ADR 0010 k"
+    }
+   },
+   {
+    "t": 14.578,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "ept the chunking unchan"
+    }
+   },
+   {
+    "t": 14.578,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "ged (1000 characters,"
+    }
+   },
+   {
+    "t": 14.593,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " 150 overlap) so"
+    }
+   },
+   {
+    "t": 14.593,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " that"
+    }
+   },
+   {
+    "t": 14.593,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " the effect of the retrie"
+    }
+   },
+   {
+    "t": 14.593,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "val changes could be measured on"
+    }
+   },
+   {
+    "t": 14.765,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " its"
+    }
+   },
+   {
+    "t": 14.765,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " own."
+    }
+   },
+   {
+    "t": 14.765,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " That is a use"
+    }
+   },
+   {
+    "t": 14.765,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "ful p"
+    }
+   },
+   {
+    "t": 14.765,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": "attern when"
+    }
+   },
+   {
+    "t": 14.765,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " you"
+    }
+   },
+   {
+    "t": 14.765,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " change one"
+    }
+   },
+   {
+    "t": 14.765,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " part"
+    }
+   },
+   {
+    "t": 14.797,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " of a pipeline at a"
+    }
+   },
+   {
+    "t": 14.797,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c19-ee6c-7b32-97b6-b6e5d3672881",
+     "text": " time."
+    }
+   },
+   {
+    "t": 16.218,
+    "type": "status",
+    "data": {
+     "stage": "fact_check",
+     "result": "supported"
+    }
+   },
+   {
+    "t": 16.25,
+    "type": "done",
+    "data": {
+     "answer": "ADR 0010 kept Chroma as the vector store when it added hybrid retrieval and reranking. The decision did not replace Chroma with a store that handles keyword search. Instead, the project keeps Chroma for vector search and runs BM25 keyword search in Python over the same chunks, built in memory at start-up. Vector and keyword results are merged with Reciprocal Rank Fusion, and the top 10 candidates are reranked by a cross-encoder (`Xenova/ms-marco-MiniLM-L-6-v2` via fastembed). (0010-hybrid-retrieval-with-reranking.md, section \"Decision\")\n\nThe retained vector store is the original choice from ADR 0001, which ADR 0010 explicitly revisits and keeps. (0001-chroma-as-vector-store.md, section \"0001. Chroma as the vector store\"; 0010-hybrid-retrieval-with-reranking.md, section \"0010. Cleaner parsing, hybrid retrieval and reranking; keep Chroma\")\n\nThe excerpts I retrieved state the decision but do not spell out the full reasoning for keeping Chroma, such as the alternatives considered or the specific cost of switching. For that, read the \"Context\" and \"Alternatives\" sections of ADR 0010 directly. One related design choice is also visible: ADR 0010 kept the chunking unchanged (1000 characters, 150 overlap) so that the effect of the retrieval changes could be measured on its own. That is a useful pattern when you change one part of a pipeline at a time.",
+     "sources": [
+      "0001-chroma-as-vector-store.md, section \"0001. Chroma as the vector store\"",
+      "0010-hybrid-retrieval-with-reranking.md, section \"0010. Cleaner parsing, hybrid retrieval and reranking; keep Chroma\"",
+      "0010-hybrid-retrieval-with-reranking.md, section \"Decision\""
+     ],
+     "guard": "ok"
+    }
+   }
+  ],
+  "architecture_guide|Why did hybrid search without reranking perform worse than keyword search alone?": [
+   {
+    "t": 0.0,
+    "type": "status",
+    "data": {
+     "stage": "received"
+    }
+   },
+   {
+    "t": 1.203,
+    "type": "status",
+    "data": {
+     "stage": "guard",
+     "result": "ok"
+    }
+   },
+   {
+    "t": 3.0,
+    "type": "status",
+    "data": {
+     "stage": "tool_call",
+     "name": "search_knowledge",
+     "args": {
+      "question": "Why did hybrid search without reranking perform worse than keyword search alone?",
+      "query": "hybrid search without reranking worse than keyword search"
+     }
+    }
+   },
+   {
+    "t": 5.266,
+    "type": "status",
+    "data": {
+     "stage": "tool_result",
+     "name": "search_knowledge"
+    }
+   },
+   {
+    "t": 6.734,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "Hybrid search without"
+    }
+   },
+   {
+    "t": 6.906,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": " reranking l"
+    }
+   },
+   {
+    "t": 6.906,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "ost to B"
+    }
+   },
+   {
+    "t": 6.906,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "M25 alone because the we"
+    }
+   },
+   {
+    "t": 6.906,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "aker vector ranking di"
+    }
+   },
+   {
+    "t": 6.906,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "luted good keyword results."
+    }
+   },
+   {
+    "t": 6.906,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": " Reciprocal R"
+    }
+   },
+   {
+    "t": 6.906,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "ank Fusion (RR"
+    }
+   },
+   {
+    "t": 7.078,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "F) weights both r"
+    }
+   },
+   {
+    "t": 7.078,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "ankers"
+    }
+   },
+   {
+    "t": 7.078,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": " equally, so the"
+    }
+   },
+   {
+    "t": 7.078,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": " vector results p"
+    }
+   },
+   {
+    "t": 7.078,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "ulled down r"
+    }
+   },
+   {
+    "t": 7.078,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "ankings that B"
+    }
+   },
+   {
+    "t": 7.078,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "M25 had"
+    }
+   },
+   {
+    "t": 7.078,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": " already gotten right (0010"
+    }
+   },
+   {
+    "t": 7.234,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "-hybrid-retr"
+    }
+   },
+   {
+    "t": 7.234,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "ieval-with-reranking"
+    }
+   },
+   {
+    "t": 7.234,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": ".md, section \"Altern"
+    }
+   },
+   {
+    "t": 7.234,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "atives considered\").\n\nKe"
+    }
+   },
+   {
+    "t": 7.234,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "yword search alone mat"
+    }
+   },
+   {
+    "t": 7.234,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "ched reranked"
+    }
+   },
+   {
+    "t": 7.234,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": " hybrid on hit@"
+    }
+   },
+   {
+    "t": 7.234,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "4 and c"
+    }
+   },
+   {
+    "t": 7.406,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "ost almost nothing, but"
+    }
+   },
+   {
+    "t": 7.406,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": " it ranked the right passage"
+    }
+   },
+   {
+    "t": 7.406,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": " lower (MRR 0"
+    }
+   },
+   {
+    "t": 7.406,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": ".85). The record not"
+    }
+   },
+   {
+    "t": 7.406,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "es that it"
+    }
+   },
+   {
+    "t": 7.406,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": " would fail on paraphr"
+    }
+   },
+   {
+    "t": 7.406,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "ased questions that share no words with"
+    }
+   },
+   {
+    "t": 7.562,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": " the text, but this"
+    }
+   },
+   {
+    "t": 7.562,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": " test set had few of those."
+    }
+   },
+   {
+    "t": 7.562,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": " That is why the project k"
+    }
+   },
+   {
+    "t": 7.562,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "ept h"
+    }
+   },
+   {
+    "t": 7.562,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "ybrid retrieval and"
+    }
+   },
+   {
+    "t": 7.562,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": " added a reranker:"
+    }
+   },
+   {
+    "t": 7.562,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": " the reranker cor"
+    }
+   },
+   {
+    "t": 7.562,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "rects the"
+    }
+   },
+   {
+    "t": 7.703,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": " "
+    }
+   },
+   {
+    "t": 7.703,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "ord"
+    }
+   },
+   {
+    "t": 7.703,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "ering after"
+    }
+   },
+   {
+    "t": 7.703,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": " fusion, which"
+    }
+   },
+   {
+    "t": 7.719,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": " pl"
+    }
+   },
+   {
+    "t": 7.719,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": "ain fusion did"
+    }
+   },
+   {
+    "t": 7.719,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-1ba0-77c3-88c1-f361a93cec4f",
+     "text": " not do."
+    }
+   },
+   {
+    "t": 9.016,
+    "type": "status",
+    "data": {
+     "stage": "fact_check",
+     "result": "supported"
+    }
+   },
+   {
+    "t": 9.031,
+    "type": "done",
+    "data": {
+     "answer": "Hybrid search without reranking lost to BM25 alone because the weaker vector ranking diluted good keyword results. Reciprocal Rank Fusion (RRF) weights both rankers equally, so the vector results pulled down rankings that BM25 had already gotten right (0010-hybrid-retrieval-with-reranking.md, section \"Alternatives considered\").\n\nKeyword search alone matched reranked hybrid on hit@4 and cost almost nothing, but it ranked the right passage lower (MRR 0.85). The record notes that it would fail on paraphrased questions that share no words with the text, but this test set had few of those. That is why the project kept hybrid retrieval and added a reranker: the reranker corrects the ordering after fusion, which plain fusion did not do.",
+     "sources": [
+      "0010-hybrid-retrieval-with-reranking.md, section \"Alternatives considered\""
+     ],
+     "guard": "ok"
+    }
+   }
+  ],
+  "architecture_guide|Why did the project choose Langfuse over LangSmith for evaluation?": [
+   {
+    "t": 0.0,
+    "type": "status",
+    "data": {
+     "stage": "received"
+    }
+   },
+   {
+    "t": 2.047,
+    "type": "status",
+    "data": {
+     "stage": "guard",
+     "result": "ok"
+    }
+   },
+   {
+    "t": 3.484,
+    "type": "status",
+    "data": {
+     "stage": "tool_call",
+     "name": "search_knowledge",
+     "args": {
+      "question": "Why did the project choose Langfuse over LangSmith for evaluation?",
+      "query": "Langfuse vs LangSmith evaluation tracing decision"
+     }
+    }
+   },
+   {
+    "t": 5.734,
+    "type": "status",
+    "data": {
+     "stage": "tool_result",
+     "name": "search_knowledge"
+    }
+   },
+   {
+    "t": 7.922,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": "The"
+    }
+   },
+   {
+    "t": 7.969,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " project chose Langfuse"
+    }
+   },
+   {
+    "t": 7.969,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " over LangSmith m"
+    }
+   },
+   {
+    "t": 7.969,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": "ainly for"
+    }
+   },
+   {
+    "t": 7.969,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " licensing and self-hos"
+    }
+   },
+   {
+    "t": 7.969,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": "ting re"
+    }
+   },
+   {
+    "t": 7.969,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": "asons."
+    }
+   },
+   {
+    "t": 7.969,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " Both t"
+    }
+   },
+   {
+    "t": 7.969,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": "ools off"
+    }
+   },
+   {
+    "t": 8.14,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": "er simil"
+    }
+   },
+   {
+    "t": 8.14,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": "ar features, but"
+    }
+   },
+   {
+    "t": 8.14,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " LangSmith is closed"
+    }
+   },
+   {
+    "t": 8.14,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " source and"
+    }
+   },
+   {
+    "t": 8.156,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " cannot be self-hos"
+    }
+   },
+   {
+    "t": 8.156,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": "ted on a free plan."
+    }
+   },
+   {
+    "t": 8.156,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " Langfuse is open source ("
+    }
+   },
+   {
+    "t": 8.156,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": "MIT), so it can be"
+    }
+   },
+   {
+    "t": 8.312,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " self-hosted later through"
+    }
+   },
+   {
+    "t": 8.312,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " the same API, and its c"
+    }
+   },
+   {
+    "t": 8.312,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": "loud free tier is enough"
+    }
+   },
+   {
+    "t": 8.328,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " for this project. (0012-"
+    }
+   },
+   {
+    "t": 8.328,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": "evaluation-harness-"
+    }
+   },
+   {
+    "t": 8.328,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": "with-langfuse.md"
+    }
+   },
+   {
+    "t": 8.328,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": ", section \"Alternatives"
+    }
+   },
+   {
+    "t": 8.469,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " considered\")\n\nThe record also"
+    }
+   },
+   {
+    "t": 8.469,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " notes that LangSmith"
+    }
+   },
+   {
+    "t": 8.469,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " is the native LangChain/"
+    }
+   },
+   {
+    "t": 8.484,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": "LangGraph option with"
+    }
+   },
+   {
+    "t": 8.484,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " the same features, so the"
+    }
+   },
+   {
+    "t": 8.484,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " cho"
+    }
+   },
+   {
+    "t": 8.484,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": "ice was"
+    }
+   },
+   {
+    "t": 8.484,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " not about miss"
+    }
+   },
+   {
+    "t": 8.64,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": "ing funct"
+    }
+   },
+   {
+    "t": 8.64,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": "ionality. The decision ke"
+    }
+   },
+   {
+    "t": 8.64,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": "eps the option"
+    }
+   },
+   {
+    "t": 8.656,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " open:"
+    }
+   },
+   {
+    "t": 8.656,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " the"
+    }
+   },
+   {
+    "t": 8.656,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " project can start on Langfu"
+    }
+   },
+   {
+    "t": 8.656,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": "se Cloud and move to"
+    }
+   },
+   {
+    "t": 8.656,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " self-hosting later without"
+    }
+   },
+   {
+    "t": 8.703,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c1a-40d3-75e1-afdf-a81d2a4815d7",
+     "text": " changing the code."
+    }
+   },
+   {
+    "t": 9.937,
+    "type": "status",
+    "data": {
+     "stage": "fact_check",
+     "result": "supported"
+    }
+   },
+   {
+    "t": 9.953,
+    "type": "done",
+    "data": {
+     "answer": "The project chose Langfuse over LangSmith mainly for licensing and self-hosting reasons. Both tools offer similar features, but LangSmith is closed source and cannot be self-hosted on a free plan. Langfuse is open source (MIT), so it can be self-hosted later through the same API, and its cloud free tier is enough for this project. (0012-evaluation-harness-with-langfuse.md, section \"Alternatives considered\")\n\nThe record also notes that LangSmith is the native LangChain/LangGraph option with the same features, so the choice was not about missing functionality. The decision keeps the option open: the project can start on Langfuse Cloud and move to self-hosting later without changing the code.",
+     "sources": [
+      "0012-evaluation-harness-with-langfuse.md, section \"Alternatives considered\"",
+      "0012-evaluation-harness-with-langfuse.md, section \"Decision\""
+     ],
+     "guard": "ok"
+    }
+   }
+  ]
+ }
+}

@@ -3,6 +3,11 @@
 
 const BASE = '/api' // forwarded to the Python server by Vite (vite.config.ts)
 
+/** Replay build (npm run build:demo): recorded answers instead of the server. */
+export const REPLAY = import.meta.env.VITE_REPLAY === '1'
+// Loaded only in the replay build, so the normal build carries no recordings.
+const replay = () => import('./demo/replay')
+
 export type Theme = { primary_color: string; avatar: string }
 
 export type Bot = {
@@ -55,15 +60,18 @@ async function check(res: Response): Promise<Response> {
 }
 
 export async function listBots(): Promise<Bot[]> {
+  if (REPLAY) return (await replay()).listBots()
   return (await check(await fetch(`${BASE}/bots`))).json()
 }
 
 export async function newThread(botId: string): Promise<string> {
+  if (REPLAY) return (await replay()).newThread()
   const res = await check(await fetch(`${BASE}/bots/${botId}/threads`, { method: 'POST' }))
   return (await res.json()).thread_id
 }
 
 export async function getThread(botId: string, threadId: string): Promise<Thread> {
+  if (REPLAY) return (await replay()).getThread(botId, threadId)
   return (await check(await fetch(`${BASE}/bots/${botId}/threads/${threadId}`))).json()
 }
 
@@ -103,13 +111,15 @@ async function streamPost(path: string, body: object, onEvent: (e: TurnEvent) =>
   }
 }
 
-export function sendMessage(botId: string, threadId: string, text: string,
+export async function sendMessage(botId: string, threadId: string, text: string,
                             onEvent: (e: TurnEvent) => void, signal?: AbortSignal) {
+  if (REPLAY) return (await replay()).sendMessage(botId, threadId, text, onEvent, signal)
   return streamPost(`/bots/${botId}/threads/${threadId}/messages`, { text }, onEvent, signal)
 }
 
-export function sendApproval(botId: string, threadId: string, decision: 'approve' | 'reject',
+export async function sendApproval(botId: string, threadId: string, decision: 'approve' | 'reject',
                              onEvent: (e: TurnEvent) => void, signal?: AbortSignal) {
+  if (REPLAY) return (await replay()).sendApproval()
   return streamPost(`/bots/${botId}/threads/${threadId}/approval`, { decision }, onEvent, signal)
 }
 
@@ -135,6 +145,7 @@ export async function logout(): Promise<void> {
 
 /** The signed-in user, or null if there is no valid session. */
 export async function me(): Promise<Me | null> {
+  if (REPLAY) return (await replay()).me()
   const res = await fetch(`${BASE}/auth/me`)
   if (res.status === 401) return null
   return (await check(res)).json()

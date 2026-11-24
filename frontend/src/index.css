@@ -154,3 +154,12 @@ code { font-family: ui-monospace, Consolas, monospace; font-size: 0.88em; backgr
   .chat-title p { display: none; }
   .tool-call dl div { grid-template-columns: 1fr; gap: 0; }
 }
+
+/* ---------- replay demo (VITE_REPLAY=1) ---------- */
+.replay-banner { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: center; align-items: center;
+                 padding: 8px 16px; font-size: 0.85rem; background: var(--surface); border-bottom: 1px solid var(--border); }
+.composer.replay { flex-wrap: wrap; align-items: center; }
+.composer.replay:empty { display: none; }
+/* The banner takes its own height; the chat fills the rest of the screen. */
+#root:has(.replay-banner) { display: flex; flex-direction: column; height: 100dvh; overflow-y: auto; }
+#root:has(.replay-banner) .chat { height: auto; flex: 1; min-height: 0; width: 100%; box-sizing: border-box; }

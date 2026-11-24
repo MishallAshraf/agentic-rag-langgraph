@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, KeyboardEvent } from 'react'
-import { ApiError, getThread, newThread, sendApproval, sendMessage } from './api'
+import { ApiError, getThread, newThread, REPLAY, sendApproval, sendMessage } from './api'
 import type { Approval, Bot, TurnEvent } from './api'
 import { Avatar } from './Avatar'
 import { describeStep } from './steps'
@@ -243,6 +243,14 @@ export function Chat({ bot, onBack, onSignedOut, onTurnEnd }: Props) {
         <div ref={endRef} />
       </main>
 
+      {REPLAY ? (
+        <div className="composer replay">
+          {messages.length > 0 && bot.suggested_questions
+            .filter((q) => !messages.some((m) => m.role === 'user' && m.text === q))
+            .map((q) => <button key={q} className="chip" onClick={() => send(q)} disabled={busy}>{q}</button>)}
+          {messages.length > 0 && <span className="muted small">Replay demo: pick a recorded question.</span>}
+        </div>
+      ) : (
       <form className="composer" onSubmit={onSubmit}>
         <textarea
           value={input}
@@ -256,6 +264,7 @@ export function Chat({ bot, onBack, onSignedOut, onTurnEnd }: Props) {
         />
         <button type="submit" className="primary" disabled={busy || !!pending || !input.trim()}>Send</button>
       </form>
+      )}
     </div>
   )
 }

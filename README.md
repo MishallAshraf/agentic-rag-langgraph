@@ -40,6 +40,8 @@ Step 15 is done: the bot builder in the web app. An admin uploads documents and 
 
 Step 16 is done: an improvement loop. A red-team agent attacks a bot with realistic tricky messages, a stronger model judges the replies, a researcher looks up how production systems handle each failure, an engineer proposes short rules, and an architect reruns the failures and earlier passes before a person approves. Its first runs also found that the guard, grader and fact check had been answered by the fallback model, which is now fixed.
 
+Step 17 is in progress: error analysis. Instead of generic test sets, a bot's evaluation set is built from its own conversations: synthetic messages spread over how its users differ, labelled by a domain expert on a review page, grouped into the bot's own failure modes, with one judge per mode checked against the expert's labels. The café bot's 50 conversations are ready for labelling.
+
 ## Setup
 
 Requires Python 3.11 on Windows (the pinned requirements include Windows-only packages; see [ADR 0004](docs/adr/0004-pin-all-dependency-versions.md)).
@@ -270,6 +272,22 @@ Run it on any bot with documents. `--dry-run` writes nothing and stops at the pr
 
 The red team runs 3 fixed attacks, about 6 generated ones aimed at the bot's own documents, and two of its suggested questions (a fix must not make it refuse those). Failing replies go to the researcher, who reads [docs/production_playbook.md](docs/production_playbook.md), then to the engineer, who may only add up to 3 one-sentence **learned rules** (checked by code). The architect reruns the failures and a regression sample on the changed bot. If you approve, the rules are added to the bot's file and each attack that broke it becomes a test in `evals/bots/<bot>.yaml`. Failures that need a code change, such as a guardrail misfire, are reported instead. A run costs about USD 0.05-0.20 and writes a report to `evals/results/`. See [ADR 0021](docs/adr/0021-improvement-loop-red-team-research-fix-verify.md).
 
+## Step 17: error analysis
+
+The method from *Evals for AI Engineers* (Shankar and Husain): read the bot's conversations, write down what goes wrong, and only then build evaluators, one per kind of failure, checked against your labels. Each step writes plain files to `evals/analysis/<bot>/`:
+
+```bash
+.\.venv\Scripts\python.exe analysis.py dimensions --bot bots/customer_handbook.yaml   # how users differ; edit the file
+.\.venv\Scripts\python.exe analysis.py generate --bot bots/customer_handbook.yaml --n 50
+.\.venv\Scripts\python.exe analysis.py run --bot bots/customer_handbook.yaml
+#   label at http://localhost:5173/#/review/customer_handbook (admins): pass/fail, a note, where it first went wrong
+.\.venv\Scripts\python.exe analysis.py taxonomy --bot bots/customer_handbook.yaml     # groups your notes; approve on the page
+.\.venv\Scripts\python.exe analysis.py judges --bot bots/customer_handbook.yaml       # one judge per failure mode, TPR/TNR
+.\.venv\Scripts\python.exe -m unittest tests.test_analysis -v                          # no LLM needed
+```
+
+Generating and running 50 conversations costs about USD 0.10; building the judges about the same. See [ADR 0022](docs/adr/0022-error-analysis-per-bot-eval-sets.md).
+
 ## Project layout
 
 | Path | Contents |
@@ -314,6 +332,10 @@ The red team runs 3 fixed attacks, about 6 generated ones aimed at the bot's own
 | `docs/production_playbook.md` | How production chatbots handle each kind of failure; the researcher's source |
 | `evals/check_guard.py`, `evals/guard_cases.yaml` | Live check of the input guardrail on labelled messages (injection, crisis, pushy but ok) |
 | `tests/test_guardrails.py` | Tests for the input guardrail's code paths and the case file, with a stand-in classifier |
+| `analysis.py` | Error analysis: dimensions, synthetic messages, traces, labels, failure taxonomy, per-mode judges, report |
+| `evals/analysis/<bot>/` | A bot's dimensions, messages, traces, expert labels, failure modes and judge results |
+| `frontend/src/Review.tsx` | The review page (`#/review`): label conversations, assign and approve failure modes, read judge quality |
+| `tests/test_analysis.py` | Tests for sampling, labels, taxonomy, splits, judge metrics and the review API, with stand-in models |
 | `tests/test_eval_ids.py` | Tests that every bot's eval dataset can be synced to Langfuse without id clashes |
 | `tests/test_improve.py` | Tests for the loop's decisions (fix, retry, reject, give up, apply), with stand-in models |
 | `frontend/` | Web app (React, TypeScript, Vite): bot list, themed chat, streaming, approvals |

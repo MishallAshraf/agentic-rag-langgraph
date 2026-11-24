@@ -22,6 +22,7 @@ Each step builds on the previous one and maps to topics from the "Mastering AI s
 | 14 | Done | Multi-agent bots: a planner, parallel researchers over other bots' collections, a writer and a reviewer | Multi-agent orchestration; deep research case study |
 | 15 | Done | The bot builder in the web app: upload documents, follow the build, review and publish, without a restart | Background jobs and resumable streaming; file upload security; human-in-the-loop publishing |
 | 16 | Done | Improvement loop: a red team attacks a bot, a researcher finds production practice, an engineer proposes rules, an architect verifies them | Red-teaming and adversarial evaluation; regression testing; agent roles with code between them; model routing and fallbacks |
+| 17 | In progress (labelling) | Error analysis: dimension-based synthetic conversations, expert labels on a review page, failure taxonomy, one validated judge per failure mode | Evaluation datasets; error analysis (open and axial coding); LLM-as-judge validation (TPR/TNR, bias correction) |
 
 ## Principles carried through every step
 

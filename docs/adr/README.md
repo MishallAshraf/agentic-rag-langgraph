@@ -25,6 +25,7 @@ An ADR records one significant decision: the context, what was decided, the alte
 | [0019](0019-multi-agent-research-team.md) | Multi-agent research bots: planner, parallel researchers, writer, one review round; agents act with the user's permissions | Accepted |
 | [0020](0020-bot-builder-as-a-service.md) | The bot builder as a service: checked uploads, a background job with resumable progress, review in the browser, no restart | Accepted |
 | [0021](0021-improvement-loop-red-team-research-fix-verify.md) | Improvement loop: red team, research, engineer, architect; fixes limited to checked learned rules a person approves | Accepted |
+| [0022](0022-error-analysis-per-bot-eval-sets.md) | Error analysis: each bot's eval set, failure modes and judges come from its own conversations, labelled by a domain expert | Accepted |
 
 Statuses: **Proposed** (under discussion), **Accepted**, **Superseded by NNNN** (replaced by a later decision; the old record is kept, not edited).
 

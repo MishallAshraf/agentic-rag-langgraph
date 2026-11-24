@@ -28,6 +28,8 @@ Step 9 is done: hardening. Guardrails run around the agent (crisis messages get 
 
 Step 10 is done: a bot builder. Point it at a folder of documents and describe a use case; it indexes the documents into the bot's own collection, drafts the bot's fields with an LLM, checks them in code (schema, tool policy, contrast, and that every suggested question is answerable from the documents), writes test cases, and saves the bot after a human approves. Every bot has its own collection, notes folder and cache, and tools are built per bot.
 
+Step 11 is done: an HTTP API. FastAPI serves every bot; a message's reply streams back as Server-Sent Events (progress, the answer token by token, then the final checked answer with its sources), approvals pause and resume across requests, and the server guards itself with a lock per conversation, a rate limit, a time budget per turn and repair after a disconnect.
+
 ## Setup
 
 Requires Python 3.11 on Windows (the pinned requirements include Windows-only packages; see [ADR 0004](docs/adr/0004-pin-all-dependency-versions.md)).
@@ -181,6 +183,15 @@ The builder indexes the folder, drafts the bot, validates it (retrying with the 
 
 To re-index a bot's documents after they change: `python ingest.py bots/<id>.yaml`. The included example, the "Design Decisions Guide", answers questions about this project's ADRs.
 
+## Step 11: API with streaming
+
+```bash
+.\.venv\Scripts\python.exe api.py                                # http://127.0.0.1:8000, interactive docs at /docs
+.\.venv\Scripts\python.exe api_client.py --bot architecture_guide  # in a second terminal
+```
+
+The client shows each event as it arrives and, after each answer, the time to the first event, the first token and the final answer. Approvals are asked for in the terminal and sent to the approval route. The routes, the events and why tokens are only a preview of the final answer are described at the top of `api.py` and in [ADR 0016](docs/adr/0016-fastapi-with-server-sent-events.md). The server listens on localhost only: there is no authentication until Step 13.
+
 ## Project layout
 
 | Path | Contents |
@@ -210,6 +221,8 @@ To re-index a bot's documents after they change: `python ingest.py bots/<id>.yam
 | `step7_agent.py` | The engine with answer fact-checking |
 | `guardrails.py` | Input check (crisis, injection), tool output marked as data, canary |
 | `step9_agent.py` | The Step 7 agent inside guardrails, with a step limit and recovery |
+| `api.py` | FastAPI server: bots, conversations, streamed turns (SSE), approvals |
+| `api_client.py` | Terminal client for the API, with timings |
 | `evals/golden.yaml` | Hand-checked test cases: questions, expected behaviour, key points, pages, rules |
 | `evals/run_evals.py` | Runs the cases through the agent and scores them; Langfuse experiments |
 | `evals/judge.py` | The LLM judge (correct, faithful) |

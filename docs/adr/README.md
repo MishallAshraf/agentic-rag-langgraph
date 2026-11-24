@@ -19,6 +19,7 @@ An ADR records one significant decision: the context, what was decided, the alte
 | [0013](0013-guardrails-around-the-agent.md) | Guardrails around the agent: input check, tool output as data, canary | Accepted |
 | [0014](0014-reliability-cost-and-caching.md) | Reliability and cost limits; an exact cache instead of a semantic one | Accepted |
 | [0015](0015-bot-builder-and-multi-tenancy.md) | Bot builder: LLM fills fields, code renders and checks, a human approves; one collection per bot | Accepted |
+| [0016](0016-fastapi-with-server-sent-events.md) | FastAPI with Server-Sent Events; streamed tokens are a preview, the final event is the answer | Accepted |
 
 Statuses: **Proposed** (under discussion), **Accepted**, **Superseded by NNNN** (replaced by a later decision; the old record is kept, not edited).
 

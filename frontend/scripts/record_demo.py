@@ -26,7 +26,7 @@ QUESTIONS = {
     "research_assistant": [
         "How does the project check that answers are faithful to the sources, and how does it guard against "
         "prompt injection?",
-        "How was retrieval quality measured, and why did that lead to adding a reranker?",
+        "Why does the project keep Chroma as its vector store, and how does it decide which tool calls need human approval?",
     ],
 }
 

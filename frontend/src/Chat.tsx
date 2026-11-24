@@ -269,18 +269,57 @@ export function Chat({ bot, onBack, onSignedOut, onTurnEnd }: Props) {
   )
 }
 
-/** Model text, shown safely: paragraphs and `code`, never interpreted as HTML. */
-function Text({ text }: { text: string }) {
+/** `code` and **bold** inside one line of text. */
+function Inline({ text }: { text: string }) {
   return (
     <>
-      {text.split(/\n{2,}/).map((para, i) => (
-        <p key={i}>
-          {para.split(/(`[^`]+`)/).map((part, j) =>
-            part.startsWith('`') && part.endsWith('`') && part.length > 2
-              ? <code key={j}>{part.slice(1, -1)}</code>
-              : part)}
-        </p>
-      ))}
+      {text.split(/(`[^`]+`|\*\*[^*]+\*\*)/).map((part, j) =>
+        part.startsWith('`') && part.endsWith('`') && part.length > 2 ? <code key={j}>{part.slice(1, -1)}</code>
+          : part.startsWith('**') && part.endsWith('**') && part.length > 4 ? <strong key={j}>{part.slice(2, -2)}</strong>
+          : part)}
+    </>
+  )
+}
+
+const LIST_ITEM = /^([-*•]|\d+[.)])\s+/
+type Group = { kind: 'p' | 'ul' | 'ol'; lines: string[] }
+
+/** Consecutive lines of the same kind: text, bullets or a numbered list. */
+function groups(lines: string[]): Group[] {
+  const out: Group[] = []
+  for (const line of lines) {
+    const kind = /^[-*•]\s+/.test(line) ? 'ul' : /^\d+[.)]\s+/.test(line) ? 'ol' : 'p'
+    const last = out[out.length - 1]
+    if (last && last.kind === kind) last.lines.push(line)
+    else out.push({ kind, lines: [line] })
+  }
+  return out
+}
+
+/**
+ * Model text, shown safely and never interpreted as HTML: paragraphs, headings,
+ * bullet and numbered lists, `code` and **bold**. Some models answer in Markdown.
+ */
+function Text({ text }: { text: string }) {
+  const blocks = text.split(/\n{2,}/).map((b) => b.trim()).filter((b) => b && !/^(-{3,}|\*{3,})$/.test(b))
+  return (
+    <>
+      {blocks.flatMap((block, i) => groups(block.split('\n').map((l) => l.trim())).map((g, k) => {
+        const key = `${i}.${k}`
+        if (g.kind === 'ul' || g.kind === 'ol') {
+          const items = g.lines.map((l, j) => <li key={j}><Inline text={l.replace(LIST_ITEM, '')} /></li>)
+          // A list split by blank lines keeps its numbering.
+          return g.kind === 'ol' ? <ol key={key} start={parseInt(g.lines[0], 10)}>{items}</ol> : <ul key={key}>{items}</ul>
+        }
+        return (
+          <p key={key}>
+            {g.lines.map((l, j) => {
+              const heading = l.match(/^#{1,6}\s+(.*)$/)
+              return <span key={j}>{j > 0 && <br />}{heading ? <strong><Inline text={heading[1]} /></strong> : <Inline text={l} />}</span>
+            })}
+          </p>
+        )
+      }))}
     </>
   )
 }

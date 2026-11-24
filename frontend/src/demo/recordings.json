@@ -23,6 +23,24 @@
     "primary_color": "#1F4E79",
     "avatar": "compass"
    }
+  },
+  {
+   "id": "research_assistant",
+   "name": "Research Assistant",
+   "description": "Answers broad questions that span several knowledge bases, by researching each part in parallel and writing one cited answer.",
+   "welcome": "Hi! Ask me something that spans the course material and this project's design records, and I'll research each part and bring it together. (In this replay, the research answers were recorded with free open models, Gemma 4 and Nemotron 3.)",
+   "suggested_questions": [
+    "How does the project check that answers are faithful to the sources, and how does it guard against prompt injection?",
+    "Why does the project keep Chroma as its vector store, and how does it decide which tool calls need human approval?"
+   ],
+   "topics": [
+    "questions that combine the counselling course material",
+    "this project's design decisions"
+   ],
+   "theme": {
+    "primary_color": "#5B3A8C",
+    "avatar": "spark"
+   }
   }
  ],
  "turns": {
@@ -1624,6 +1642,1779 @@
      "sources": [
       "0012-evaluation-harness-with-langfuse.md, section \"Alternatives considered\"",
       "0012-evaluation-harness-with-langfuse.md, section \"Decision\""
+     ],
+     "guard": "ok"
+    }
+   }
+  ],
+  "research_assistant|How does the project check that answers are faithful to the sources, and how does it guard against prompt injection?": [
+   {
+    "t": 0.0,
+    "type": "status",
+    "data": {
+     "stage": "received"
+    }
+   },
+   {
+    "t": 4.062,
+    "type": "status",
+    "data": {
+     "stage": "guard",
+     "result": "ok"
+    }
+   },
+   {
+    "t": 6.781,
+    "type": "status",
+    "data": {
+     "stage": "plan",
+     "tasks": [
+      {
+       "question": "How does the project check that answers are faithful to the sources?",
+       "source": "Design Decisions Guide"
+      },
+      {
+       "question": "How does the project guard against prompt injection?",
+       "source": "Design Decisions Guide"
+      }
+     ]
+    }
+   },
+   {
+    "t": 27.578,
+    "type": "status",
+    "data": {
+     "stage": "research",
+     "question": "How does the project check that answers are faithful to the sources?",
+     "source": "Design Decisions Guide",
+     "found": true
+    }
+   },
+   {
+    "t": 36.406,
+    "type": "status",
+    "data": {
+     "stage": "research",
+     "question": "How does the project guard against prompt injection?",
+     "source": "Design Decisions Guide",
+     "found": true
+    }
+   },
+   {
+    "t": 39.906,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "**Direct answer"
+    }
+   },
+   {
+    "t": 39.906,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": ":** The"
+    }
+   },
+   {
+    "t": 39.906,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " project uses a"
+    }
+   },
+   {
+    "t": 39.906,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " two‑layer runtime"
+    }
+   },
+   {
+    "t": 40.046,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " check for faithfulness (correct"
+    }
+   },
+   {
+    "t": 40.046,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "ive retrieval and a fact‑"
+    }
+   },
+   {
+    "t": 40.046,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "check node) and a set"
+    }
+   },
+   {
+    "t": 40.062,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " of guardrails around the agent"
+    }
+   },
+   {
+    "t": 40.187,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " to"
+    }
+   },
+   {
+    "t": 40.187,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " defend"
+    }
+   },
+   {
+    "t": 40.187,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " against both"
+    }
+   },
+   {
+    "t": 40.187,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " direct and indirect prompt injection,"
+    }
+   },
+   {
+    "t": 40.343,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " including a canary mechanism,"
+    }
+   },
+   {
+    "t": 40.359,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " data marking"
+    }
+   },
+   {
+    "t": 40.359,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": ","
+    }
+   },
+   {
+    "t": 40.359,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " and human‑approval gates"
+    }
+   },
+   {
+    "t": 40.625,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " for state‑changing tool"
+    }
+   },
+   {
+    "t": 40.625,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " calls.\n\n---\n\n### Faith"
+    }
+   },
+   {
+    "t": 40.828,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "fulness checking"
+    }
+   },
+   {
+    "t": 41.437,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "\n\n1. **Corrective"
+    }
+   },
+   {
+    "t": 41.453,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " retrieval (grad"
+    }
+   },
+   {
+    "t": 41.593,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "ed retrieval)** – A sub"
+    }
+   },
+   {
+    "t": 41.593,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "graph"
+    }
+   },
+   {
+    "t": 41.593,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " runs an LLM grader"
+    }
+   },
+   {
+    "t": 41.593,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " that evaluates whether retrieved passages are"
+    }
+   },
+   {
+    "t": 41.718,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " relevant and sufficient. If not"
+    }
+   },
+   {
+    "t": 41.718,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": ", it"
+    }
+   },
+   {
+    "t": 41.718,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " rewrites the query and"
+    }
+   },
+   {
+    "t": 41.718,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " ret"
+    }
+   },
+   {
+    "t": 41.875,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "ries up to three times until"
+    }
+   },
+   {
+    "t": 41.875,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " the grader has no new"
+    }
+   },
+   {
+    "t": 41.875,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " query (0011"
+    }
+   },
+   {
+    "t": 41.875,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "-graded-retrieval"
+    }
+   },
+   {
+    "t": 42.015,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "-and-answer-checking.md"
+    }
+   },
+   {
+    "t": 42.015,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": ", section Decision).\n\n"
+    }
+   },
+   {
+    "t": 42.015,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "2. **Fact‑check"
+    }
+   },
+   {
+    "t": 42.015,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " node** – When `verify"
+    }
+   },
+   {
+    "t": 42.156,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "_answers` is enabled and"
+    }
+   },
+   {
+    "t": 42.156,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " a source tool was used,"
+    }
+   },
+   {
+    "t": 42.156,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " a fact‑check node compares"
+    }
+   },
+   {
+    "t": 42.156,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " the final answer against that turn"
+    }
+   },
+   {
+    "t": 42.453,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "’s sources using a structured `"
+    }
+   },
+   {
+    "t": 42.453,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "Verdict`. Unsupported"
+    }
+   },
+   {
+    "t": 42.453,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " answers are removed from history,"
+    }
+   },
+   {
+    "t": 42.515,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " the checker’s objections are fed"
+    }
+   },
+   {
+    "t": 42.781,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " back to the agent for one"
+    }
+   },
+   {
+    "t": 42.812,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " retry, and the second answer"
+    }
+   },
+   {
+    "t": 43.062,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " is not re‑checked ("
+    }
+   },
+   {
+    "t": 43.078,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "0011-grad"
+    }
+   },
+   {
+    "t": 43.234,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "ed-retrieval-and-"
+    }
+   },
+   {
+    "t": 43.234,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "answer-checking.md, section"
+    }
+   },
+   {
+    "t": 43.234,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " Decision). The UI surfaces"
+    }
+   },
+   {
+    "t": 43.234,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " this"
+    }
+   },
+   {
+    "t": 43.359,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " step and shows the"
+    }
+   },
+   {
+    "t": 43.359,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " sources in the final answer ("
+    }
+   },
+   {
+    "t": 43.359,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "0017-react-front"
+    }
+   },
+   {
+    "t": 43.375,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "end-themed-per-bot"
+    }
+   },
+   {
+    "t": 43.515,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": ".md, section Decision).\n\n3"
+    }
+   },
+   {
+    "t": 43.515,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": ". **Offline evaluation**"
+    }
+   },
+   {
+    "t": 43.515,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " – Faithfulness is also"
+    }
+   },
+   {
+    "t": 43.515,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " measured offline (e.g.,"
+    }
+   },
+   {
+    "t": 43.656,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " “Faithful: "
+    }
+   },
+   {
+    "t": 43.671,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "8/8 on the first"
+    }
+   },
+   {
+    "t": 43.687,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " bot”), which"
+    }
+   },
+   {
+    "t": 43.75,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " caught hallucinations the runtime checker"
+    }
+   },
+   {
+    "t": 43.812,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " missed (0015"
+    }
+   },
+   {
+    "t": 43.812,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "-bot-builder).\n\n---\n\n"
+    }
+   },
+   {
+    "t": 43.812,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "### Guarding against prompt injection"
+    }
+   },
+   {
+    "t": 43.812,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "\n\nThe project places"
+    }
+   },
+   {
+    "t": 43.937,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " guardrails around the agent to"
+    }
+   },
+   {
+    "t": 43.953,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " guarantee safe, consistent, and"
+    }
+   },
+   {
+    "t": 43.953,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " auditable responses rather than relying"
+    }
+   },
+   {
+    "t": 43.953,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " on the model’s own judgement"
+    }
+   },
+   {
+    "t": 44.218,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " (0013-"
+    }
+   },
+   {
+    "t": 44.281,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "guardrails-around-the-agent.md"
+    }
+   },
+   {
+    "t": 44.531,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": ", section Context). These guard"
+    }
+   },
+   {
+    "t": 44.625,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "rails address three threat"
+    }
+   },
+   {
+    "t": 44.656,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " categories"
+    }
+   },
+   {
+    "t": 44.687,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": ":"
+    }
+   },
+   {
+    "t": 44.734,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " students in crisis, direct prompt"
+    }
+   },
+   {
+    "t": 44.765,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " injection, and indirect prompt injection"
+    }
+   },
+   {
+    "t": 44.812,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " via poisoned content such as"
+    }
+   },
+   {
+    "t": 44.843,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " course text or saved notes returned"
+    }
+   },
+   {
+    "t": 44.875,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " by `list_notes`"
+    }
+   },
+   {
+    "t": 44.921,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " (0013-"
+    }
+   },
+   {
+    "t": 44.953,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "guardrails-around-the-agent.md"
+    }
+   },
+   {
+    "t": 44.984,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": ", section Context).\n\nSpecific defences"
+    }
+   },
+   {
+    "t": 45.015,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " include:\n\n- **Canary"
+    }
+   },
+   {
+    "t": 45.046,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " mechanism** – Detects and"
+    }
+   },
+   {
+    "t": 45.093,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " replaces any leaked system‑prompt"
+    }
+   },
+   {
+    "t": 45.14,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " content, removing it from history"
+    }
+   },
+   {
+    "t": 45.171,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " (0013-"
+    }
+   },
+   {
+    "t": 45.203,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "guardrails-around-the-agent.md"
+    }
+   },
+   {
+    "t": 45.234,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": ", section Observed).\n-"
+    }
+   },
+   {
+    "t": 45.281,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " **Data marking of retrieved content"
+    }
+   },
+   {
+    "t": 45.312,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "** – Serves as a"
+    }
+   },
+   {
+    "t": 45.343,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " cheap defence‑in‑depth"
+    }
+   },
+   {
+    "t": 45.39,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " against"
+    }
+   },
+   {
+    "t": 45.437,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " indirect injection; testing showed the"
+    }
+   },
+   {
+    "t": 45.984,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " model itself"
+    }
+   },
+   {
+    "t": 46.046,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " already resisted such attacks (0"
+    }
+   },
+   {
+    "t": 46.078,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "013-guardrails"
+    }
+   },
+   {
+    "t": 46.218,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "-around-the-agent.md, section"
+    }
+   },
+   {
+    "t": 46.218,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " Observed).\n- **Human"
+    }
+   },
+   {
+    "t": 46.218,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " approval"
+    }
+   },
+   {
+    "t": 46.234,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " for state‑changing tool"
+    }
+   },
+   {
+    "t": 46.375,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " calls** – The graph enfor"
+    }
+   },
+   {
+    "t": 46.375,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "ces human approval for"
+    }
+   },
+   {
+    "t": 46.375,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " any"
+    }
+   },
+   {
+    "t": 46.375,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " tool call that changes"
+    }
+   },
+   {
+    "t": 46.515,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " external state, preventing a model"
+    }
+   },
+   {
+    "t": 46.515,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " from being pushed into dangerous actions"
+    }
+   },
+   {
+    "t": 46.515,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": " by injected text (00"
+    }
+   },
+   {
+    "t": 46.515,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c2e-fa8a-7ac3-ac09-e21d653cae54",
+     "text": "08-human-)."
+    }
+   },
+   {
+    "t": 62.0,
+    "type": "status",
+    "data": {
+     "stage": "review",
+     "result": "approved"
+    }
+   },
+   {
+    "t": 62.046,
+    "type": "done",
+    "data": {
+     "answer": "**Direct answer:** The project uses a two‑layer runtime check for faithfulness (corrective retrieval and a fact‑check node) and a set of guardrails around the agent to defend against both direct and indirect prompt injection, including a canary mechanism, data marking, and human‑approval gates for state‑changing tool calls.\n\n---\n\n### Faithfulness checking\n\n1. **Corrective retrieval (graded retrieval)** – A subgraph runs an LLM grader that evaluates whether retrieved passages are relevant and sufficient. If not, it rewrites the query and retries up to three times until the grader has no new query (0011-graded-retrieval-and-answer-checking.md, section Decision).\n\n2. **Fact‑check node** – When `verify_answers` is enabled and a source tool was used, a fact‑check node compares the final answer against that turn’s sources using a structured `Verdict`. Unsupported answers are removed from history, the checker’s objections are fed back to the agent for one retry, and the second answer is not re‑checked (0011-graded-retrieval-and-answer-checking.md, section Decision). The UI surfaces this step and shows the sources in the final answer (0017-react-frontend-themed-per-bot.md, section Decision).\n\n3. **Offline evaluation** – Faithfulness is also measured offline (e.g., “Faithful: 8/8 on the first bot”), which caught hallucinations the runtime checker missed (0015-bot-builder).\n\n---\n\n### Guarding against prompt injection\n\nThe project places guardrails around the agent to guarantee safe, consistent, and auditable responses rather than relying on the model’s own judgement (0013-guardrails-around-the-agent.md, section Context). These guardrails address three threat categories: students in crisis, direct prompt injection, and indirect prompt injection via poisoned content such as course text or saved notes returned by `list_notes` (0013-guardrails-around-the-agent.md, section Context).\n\nSpecific defences include:\n\n- **Canary mechanism** – Detects and replaces any leaked system‑prompt content, removing it from history (0013-guardrails-around-the-agent.md, section Observed).\n- **Data marking of retrieved content** – Serves as a cheap defence‑in‑depth against indirect injection; testing showed the model itself already resisted such attacks (0013-guardrails-around-the-agent.md, section Observed).\n- **Human approval for state‑changing tool calls** – The graph enforces human approval for any tool call that changes external state, preventing a model from being pushed into dangerous actions by injected text (0008-human-).",
+     "sources": [
+      "0008-human-approval-enforced-by-the-graph.md, section \"Context\"",
+      "0011-graded-retrieval-and-answer-checking.md, section \"Decision\"",
+      "0012-evaluation-harness-with-langfuse.md, section \"Observed (2026-11-23)\"",
+      "0013-guardrails-around-the-agent.md, section \"Alternatives considered\"",
+      "0013-guardrails-around-the-agent.md, section \"Context\"",
+      "0013-guardrails-around-the-agent.md, section \"Observed (2026-11-24, `anthropic/claude-haiku-5.5`)\"",
+      "0015-bot-builder-and-multi-tenancy.md, section \"Consequences\"",
+      "0017-react-frontend-themed-per-bot.md, section \"Decision\""
+     ],
+     "guard": "ok"
+    }
+   }
+  ],
+  "research_assistant|Why does the project keep Chroma as its vector store, and how does it decide which tool calls need human approval?": [
+   {
+    "t": 0.0,
+    "type": "status",
+    "data": {
+     "stage": "received"
+    }
+   },
+   {
+    "t": 12.5,
+    "type": "status",
+    "data": {
+     "stage": "guard",
+     "result": "ok"
+    }
+   },
+   {
+    "t": 16.407,
+    "type": "status",
+    "data": {
+     "stage": "plan",
+     "tasks": [
+      {
+       "question": "Why does the project keep Chroma as its vector store?",
+       "source": "Design Decisions Guide"
+      },
+      {
+       "question": "How does the project decide which tool calls need human approval?",
+       "source": "Design Decisions Guide"
+      }
+     ]
+    }
+   },
+   {
+    "t": 32.563,
+    "type": "status",
+    "data": {
+     "stage": "research",
+     "question": "How does the project decide which tool calls need human approval?",
+     "source": "Design Decisions Guide",
+     "found": true
+    }
+   },
+   {
+    "t": 39.297,
+    "type": "status",
+    "data": {
+     "stage": "research",
+     "question": "Why does the project keep Chroma as its vector store?",
+     "source": "Design Decisions Guide",
+     "found": true
+    }
+   },
+   {
+    "t": 41.36,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "**"
+    }
+   },
+   {
+    "t": 41.454,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "Direct"
+    }
+   },
+   {
+    "t": 41.454,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " answer:**  \nThe project"
+    }
+   },
+   {
+    "t": 41.454,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " keeps Chroma because it runs"
+    }
+   },
+   {
+    "t": 41.454,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " embedded"
+    }
+   },
+   {
+    "t": 41.563,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " ("
+    }
+   },
+   {
+    "t": 41.563,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "no separate server), supports"
+    }
+   },
+   {
+    "t": 41.563,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " the"
+    }
+   },
+   {
+    "t": 41.563,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " metadata filtering needed for later pipeline"
+    }
+   },
+   {
+    "t": 41.672,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " steps, and is"
+    }
+   },
+   {
+    "t": 41.672,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " accessed through"
+    }
+   },
+   {
+    "t": 41.688,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " LangChain’s vector-store"
+    }
+   },
+   {
+    "t": 41.688,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " interface so it"
+    }
+   },
+   {
+    "t": 41.985,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " can be swapped later. Human"
+    }
+   },
+   {
+    "t": 41.985,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "‑approval decisions"
+    }
+   },
+   {
+    "t": 41.985,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " are made per"
+    }
+   },
+   {
+    "t": 41.985,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "‑bot: each bot configuration"
+    }
+   },
+   {
+    "t": 42.094,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " lists which tools require approval"
+    }
+   },
+   {
+    "t": 42.094,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": ", and a routing function after"
+    }
+   },
+   {
+    "t": 42.11,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " the `agent` node sends"
+    }
+   },
+   {
+    "t": 42.11,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " any message"
+    }
+   },
+   {
+    "t": 42.219,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " containing such a tool call to"
+    }
+   },
+   {
+    "t": 42.219,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " a `human_approval`"
+    }
+   },
+   {
+    "t": 42.219,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " node that pauses the graph with"
+    }
+   },
+   {
+    "t": 42.219,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " LangGraph’s `interrupt"
+    }
+   },
+   {
+    "t": 42.344,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "()`.\n\n---\n\n**"
+    }
+   },
+   {
+    "t": 42.344,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "Why Chroma is kept as"
+    }
+   },
+   {
+    "t": 42.344,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " the vector store**  \n"
+    }
+   },
+   {
+    "t": 42.344,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "- Chroma requires no separate"
+    }
+   },
+   {
+    "t": 42.61,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " server — the store is just"
+    }
+   },
+   {
+    "t": 42.61,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " a folder that can be deleted"
+    }
+   },
+   {
+    "t": 42.61,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " and rebuilt with `step1"
+    }
+   },
+   {
+    "t": 42.766,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "_ingest.py` ("
+    }
+   },
+   {
+    "t": 42.782,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "0001-chroma"
+    }
+   },
+   {
+    "t": 42.907,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "-as-vector-store.md, section"
+    }
+   },
+   {
+    "t": 42.907,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " Consequences).  \n-"
+    }
+   },
+   {
+    "t": 42.922,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " It provides metadata"
+    }
+   },
+   {
+    "t": 42.922,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " filtering needed"
+    }
+   },
+   {
+    "t": 43.016,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " for later"
+    }
+   },
+   {
+    "t": 43.016,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " steps (Steps "
+    }
+   },
+   {
+    "t": 43.047,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "7 and 12)"
+    }
+   },
+   {
+    "t": 43.047,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " and its embedded mode suits a"
+    }
+   },
+   {
+    "t": 43.157,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " single‑process architecture (0"
+    }
+   },
+   {
+    "t": 43.157,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "001-chroma-as"
+    }
+   },
+   {
+    "t": 43.157,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "-vector-store.md, section Con"
+    }
+   },
+   {
+    "t": 43.157,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "sequences).  \n- The"
+    }
+   },
+   {
+    "t": 43.25,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " code depends on LangChain’s"
+    }
+   },
+   {
+    "t": 43.25,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " vector‑store interface rather than"
+    }
+   },
+   {
+    "t": 43.25,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " Chroma directly, so sw"
+    }
+   },
+   {
+    "t": 43.266,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "apping stores later would mainly involve"
+    }
+   },
+   {
+    "t": 43.391,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " changing `get_vectorstore()`"
+    }
+   },
+   {
+    "t": 43.391,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " (0001-ch"
+    }
+   },
+   {
+    "t": 43.391,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "roma-as-vector-store.md,"
+    }
+   },
+   {
+    "t": 43.391,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " section Consequences).  \n"
+    }
+   },
+   {
+    "t": 43.485,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "- ADR 00"
+    }
+   },
+   {
+    "t": 43.485,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "10 explicitly revisits and"
+    }
+   },
+   {
+    "t": 43.485,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " confirms this decision (00"
+    }
+   },
+   {
+    "t": 43.5,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "10-hybrid-retr"
+    }
+   },
+   {
+    "t": 43.782,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "ieval-with-reranking.md"
+    }
+   },
+   {
+    "t": 43.782,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": ", section 001"
+    }
+   },
+   {
+    "t": 43.782,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "0).\n\n**How the project"
+    }
+   },
+   {
+    "t": 44.125,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " decides which tool calls need human"
+    }
+   },
+   {
+    "t": 45.313,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " approval**  \n- Each"
+    }
+   },
+   {
+    "t": 46.016,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " bot configuration lists `approval_required"
+    }
+   },
+   {
+    "t": 46.032,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "` tools ("
+    }
+   },
+   {
+    "t": 46.157,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "0008-human-"
+    }
+   },
+   {
+    "t": 46.157,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "approval-enforced-by-the-g"
+    }
+   },
+   {
+    "t": 46.157,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "raph.md, section Decision"
+    }
+   },
+   {
+    "t": 46.157,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": ").  \n- After the"
+    }
+   },
+   {
+    "t": 46.266,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " `agent` node, a"
+    }
+   },
+   {
+    "t": 46.266,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " routing function sends"
+    }
+   },
+   {
+    "t": 46.282,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " any message containing such a tool"
+    }
+   },
+   {
+    "t": 46.282,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " call to a `human_"
+    }
+   },
+   {
+    "t": 46.547,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "approval` node, which pauses"
+    }
+   },
+   {
+    "t": 46.61,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " the graph with LangGraph’s"
+    }
+   },
+   {
+    "t": 46.969,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " `interrupt()` (0"
+    }
+   },
+   {
+    "t": 47.0,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "008-human-approval"
+    }
+   },
+   {
+    "t": 47.11,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "-enforced-by-the-graph"
+    }
+   },
+   {
+    "t": 47.11,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": ".md, section Decision"
+    }
+   },
+   {
+    "t": 47.11,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": ").  \n- The policy"
+    }
+   },
+   {
+    "t": 47.11,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " is enforced in code at one"
+    }
+   },
+   {
+    "t": 47.235,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " point in the graph and applies"
+    }
+   },
+   {
+    "t": 47.235,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " equally to local and MCP tools"
+    }
+   },
+   {
+    "t": 47.235,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": ", with approval being per bot"
+    }
+   },
+   {
+    "t": 47.235,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": " (0008-human"
+    }
+   },
+   {
+    "t": 47.313,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "-approval-enforced-by-the"
+    }
+   },
+   {
+    "t": 47.344,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "-graph.md, section Con"
+    }
+   },
+   {
+    "t": 47.344,
+    "type": "token",
+    "data": {
+     "message_id": "lc_run--01a20c32-cdc0-75a0-ae0e-1e9a218edb08",
+     "text": "sequences)."
+    }
+   },
+   {
+    "t": 53.079,
+    "type": "status",
+    "data": {
+     "stage": "review",
+     "result": "approved"
+    }
+   },
+   {
+    "t": 53.094,
+    "type": "done",
+    "data": {
+     "answer": "**Direct answer:**  \nThe project keeps Chroma because it runs embedded (no separate server), supports the metadata filtering needed for later pipeline steps, and is accessed through LangChain’s vector-store interface so it can be swapped later. Human‑approval decisions are made per‑bot: each bot configuration lists which tools require approval, and a routing function after the `agent` node sends any message containing such a tool call to a `human_approval` node that pauses the graph with LangGraph’s `interrupt()`.\n\n---\n\n**Why Chroma is kept as the vector store**  \n- Chroma requires no separate server — the store is just a folder that can be deleted and rebuilt with `step1_ingest.py` (0001-chroma-as-vector-store.md, section Consequences).  \n- It provides metadata filtering needed for later steps (Steps 7 and 12) and its embedded mode suits a single‑process architecture (0001-chroma-as-vector-store.md, section Consequences).  \n- The code depends on LangChain’s vector‑store interface rather than Chroma directly, so swapping stores later would mainly involve changing `get_vectorstore()` (0001-chroma-as-vector-store.md, section Consequences).  \n- ADR 0010 explicitly revisits and confirms this decision (0010-hybrid-retrieval-with-reranking.md, section 0010).\n\n**How the project decides which tool calls need human approval**  \n- Each bot configuration lists `approval_required` tools (0008-human-approval-enforced-by-the-graph.md, section Decision).  \n- After the `agent` node, a routing function sends any message containing such a tool call to a `human_approval` node, which pauses the graph with LangGraph’s `interrupt()` (0008-human-approval-enforced-by-the-graph.md, section Decision).  \n- The policy is enforced in code at one point in the graph and applies equally to local and MCP tools, with approval being per bot (0008-human-approval-enforced-by-the-graph.md, section Consequences).",
+     "sources": [
+      "0001-chroma-as-vector-store.md, section \"0001. Chroma as the vector store\"",
+      "0001-chroma-as-vector-store.md, section \"Consequences\"",
+      "0008-human-approval-enforced-by-the-graph.md, section \"Consequences\"",
+      "0008-human-approval-enforced-by-the-graph.md, section \"Decision\"",
+      "0010-hybrid-retrieval-with-reranking.md, section \"0010. Cleaner parsing, hybrid retrieval and reranking; keep Chroma\""
      ],
      "guard": "ok"
     }

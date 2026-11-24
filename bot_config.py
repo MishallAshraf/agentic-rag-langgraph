@@ -82,6 +82,21 @@ class Knowledge(BaseModel):
         return ROOT / self.folder
 
 
+class Research(BaseModel):
+    """Step 14: a multi-agent bot that researches other bots' documents instead of its own."""
+    sources: list[str] = Field(min_length=1, description="Ids of the bots whose documents may be researched.")
+    max_tasks: int = Field(3, ge=1, le=5, description="Most sub-questions researched in parallel per round.")
+    review_rounds: int = Field(1, ge=0, le=2, description="How often the reviewer may send the answer back.")
+
+    @field_validator("sources")
+    @classmethod
+    def safe_sources(cls, v: list[str]) -> list[str]:
+        bad = [s for s in v if not ID_PATTERN.match(s)]
+        if bad:
+            raise ValueError(f"invalid source ids {bad}")
+        return list(dict.fromkeys(v))  # no duplicates
+
+
 class BotConfig(BaseModel):
     id: str
     name: str
@@ -97,6 +112,8 @@ class BotConfig(BaseModel):
     approval_required: list[str] = []
     # Step 7: fact-check final answers against the sources found in the same turn.
     verify_answers: bool = False
+    # Step 14: set for a research bot (planner, parallel researchers, writer, reviewer).
+    research: Research | None = None
 
     @field_validator("id")
     @classmethod
@@ -112,6 +129,8 @@ class BotConfig(BaseModel):
         extra = set(self.approval_required) - set(self.tools)
         if extra:
             raise ValueError(f"approval_required lists tools not in tools: {sorted(extra)}")
+        if self.research and self.id in self.research.sources:
+            raise ValueError("a research bot cannot list itself as a source")
         return self
 
     def topics_text(self) -> str:

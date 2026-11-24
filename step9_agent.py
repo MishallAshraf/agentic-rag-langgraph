@@ -52,13 +52,18 @@ class State(step7_agent.State):
     guard: NotRequired[str]  # the input check's verdict for the current turn
 
 
-def build_graph(bot: BotConfig, tools: list, llm, checkpointer, guard_llm=None):
+def build_graph(bot: BotConfig, tools: list, llm, checkpointer, guard_llm=None, make_assistant=None):
+    """make_assistant(hardened_bot) builds the graph inside the guardrails (Step 14 passes the
+    research team); by default it is the Step 7 agent."""
     canary = new_canary()
     hardened_bot = bot.model_copy(update={"system_prompt": with_canary(bot.system_prompt, canary)})
     tool_node = ToolNode(tools, wrap_tool_call=mark_as_data, awrap_tool_call=amark_as_data)
     # Compiled without a checkpointer: as a subgraph it uses the parent's, so an
     # approval pause inside it is saved and resumed like any other.
-    assistant = step7_agent.build_graph(hardened_bot, tools, llm, None, tool_node=tool_node)
+    if make_assistant is None:
+        assistant = step7_agent.build_graph(hardened_bot, tools, llm, None, tool_node=tool_node)
+    else:
+        assistant = make_assistant(hardened_bot)
     check_input = make_input_check(guard_llm or llm, bot) if llm is not None else None
     refusal = injection_reply(bot)
 

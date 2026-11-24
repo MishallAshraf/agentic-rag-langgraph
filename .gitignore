@@ -14,3 +14,6 @@ docs/COURSE_NOTES.md
 documents/*
 !documents/.gitkeep
 evals/results/
+
+# Local tool settings
+.claude/

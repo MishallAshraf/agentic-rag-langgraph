@@ -20,6 +20,7 @@ cryptography==50.0.2
 distro==1.9.0
 docx2txt==0.9
 durationpy==0.11
+fastapi==0.165.0
 fastembed==0.9.0
 filelock==4.1.0
 flatbuffers==25.12.19

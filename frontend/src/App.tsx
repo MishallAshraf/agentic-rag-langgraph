@@ -6,6 +6,7 @@ import { Avatar } from './Avatar'
 import { Builder } from './Builder'
 import { Chat } from './Chat'
 import { Login } from './Login'
+import { Review } from './Review'
 
 // The open bot lives in the URL (#/bot/<id>), so a chat can be bookmarked or
 // shared, and the browser's back button returns to the list.
@@ -20,12 +21,19 @@ function buildFromHash(): string | null | undefined {
   return match ? (match[1] ?? null) : undefined
 }
 
+// Step 17: #/review lists analyses, #/review/<bot id> labels one bot's conversations.
+function reviewFromHash(): string | null | undefined {
+  const match = window.location.hash.match(/^#\/review(?:\/([a-z][a-z0-9_]{2,39}))?$/)
+  return match ? (match[1] ?? null) : undefined
+}
+
 export default function App() {
   const [user, setUser] = useState<Me | null | undefined>(undefined) // undefined: still checking
   const [bots, setBots] = useState<Bot[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [botId, setBotId] = useState<string | null>(botFromHash)
   const [buildId, setBuildId] = useState<string | null | undefined>(buildFromHash)
+  const [reviewId, setReviewId] = useState<string | null | undefined>(reviewFromHash)
 
   function signedOut() {
     setUser(null)
@@ -68,7 +76,7 @@ export default function App() {
 
   useEffect(() => {
     start()
-    const onHash = () => { setBotId(botFromHash()); setBuildId(buildFromHash()) }
+    const onHash = () => { setBotId(botFromHash()); setBuildId(buildFromHash()); setReviewId(reviewFromHash()) }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
@@ -91,6 +99,9 @@ export default function App() {
   if (user === undefined || !bots) return <div className="page"><p className="muted">Loading…</p></div>
   if (buildId !== undefined && user.role === 'admin') {
     return <Builder buildId={buildId} onBotSaved={fetchBots} onSignedOut={signedOut} />
+  }
+  if (reviewId !== undefined && user.role === 'admin') {
+    return <Review botId={reviewId} onSignedOut={signedOut} />
   }
   if (bot) {
     return <Chat key={bot.id} bot={bot} onBack={() => { window.location.hash = '' }}
@@ -118,6 +129,7 @@ export default function App() {
           </span>
           <span className="muted small">Today: {usage.turns} of {usage.turn_limit} messages</span>
           <span className="account-actions">
+            {user.role === 'admin' && <a className="button" href="#/review">Review conversations</a>}
             {user.role === 'admin' && <a className="button primary" href="#/build">Create a bot</a>}
             <button className="ghost" onClick={signOut}>Sign out</button>
           </span>

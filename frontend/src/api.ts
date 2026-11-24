@@ -216,3 +216,59 @@ export function followBuild(id: string, after: number, onEvent: (e: BuildEvent) 
   source.onerror = () => { if (source.readyState === EventSource.CLOSED) onEnd() }
   return () => source.close()
 }
+
+// ---------------------------------------------------------------- Step 17: error analysis (admins)
+// A domain expert labels a bot's synthetic conversations; the failure modes and
+// judges are built from those labels by analysis.py.
+
+export type Step = 'input_check' | 'search' | 'answer' | 'fact_check' | 'other'
+export type TraceStep =
+  | { step: 'input_check'; result: string; detail: string }
+  | { step: 'tool_call'; tool: string; args: Record<string, unknown> }
+  | { step: 'tool_result'; tool: string; text: string }
+  | { step: 'fact_check'; revisions: number }
+export type Label = { verdict: 'pass' | 'fail'; note: string; first_failure: Step | null; by: string; at: string }
+export type TraceItem = { id: string; profile: Record<string, string>; message: string; answer: string;
+                          steps: TraceStep[]; models: string[]; error: string; seconds: number;
+                          label: Label | null }
+export type FailureMode = { id: string; name: string; definition: string }
+export type Taxonomy = { status: 'proposed' | 'approved'; modes: FailureMode[]; assignments: Record<string, string[]>;
+                         approved_by?: string }
+export type Rates = { tp: number; fn: number; tn: number; fp: number; tpr: number | null; tnr: number | null }
+export type ModeJudge = { name: string; examples: string[]; dev: Rates; test: Rates;
+                          test_rates?: { expert: number; judge: number; corrected: number | null } }
+export type Judges = { model: string; splits: Record<string, number>; modes: Record<string, ModeJudge> }
+export type AnalysisSummary = { bot_id: string; traces: number; labelled: number; failed: number;
+                                taxonomy_status: 'proposed' | 'approved' | null; judges_built: boolean }
+export type Analysis = AnalysisSummary & { dimensions: { dimensions?: Record<string, string[]> }; steps: Step[];
+                                           items: TraceItem[]; taxonomy: Taxonomy | null; judges: Judges | null }
+
+export async function listAnalyses(): Promise<AnalysisSummary[]> {
+  return (await check(await fetch(`${BASE}/admin/analysis`))).json()
+}
+
+export async function getAnalysis(botId: string): Promise<Analysis> {
+  return (await check(await fetch(`${BASE}/admin/analysis/${botId}`))).json()
+}
+
+async function send<T>(method: string, path: string, body?: unknown): Promise<T> {
+  return (await check(await fetch(`${BASE}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  }))).json()
+}
+
+export function saveLabel(botId: string, traceId: string, verdict: 'pass' | 'fail', note: string,
+                          firstFailure: Step | null) {
+  return send<{ label: Label; summary: AnalysisSummary; taxonomy: Taxonomy | null }>(
+    'PUT', `/admin/analysis/${botId}/labels/${traceId}`, { verdict, note, first_failure: firstFailure })
+}
+
+export function assignModes(botId: string, traceId: string, modes: string[]) {
+  return send<Taxonomy>('PUT', `/admin/analysis/${botId}/assignments/${traceId}`, { modes })
+}
+
+export function approveTaxonomy(botId: string) {
+  return send<Taxonomy>('POST', `/admin/analysis/${botId}/taxonomy/approve`)
+}

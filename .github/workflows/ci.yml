@@ -1,0 +1,26 @@
+# Runs the test suite on Linux for every push and pull request.
+# The tests never call a real model, so a placeholder key is enough; LLM_BASE_URL points at a
+# closed port, so a test that accidentally calls the model fails instead of spending money.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OPENROUTER_API_KEY: placeholder-not-a-key
+      LLM_BASE_URL: http://127.0.0.1:9/v1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run tests
+        run: python -m unittest discover -s tests -t . -v

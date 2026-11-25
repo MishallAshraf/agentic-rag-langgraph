@@ -44,7 +44,15 @@ Step 17 is in progress: error analysis. Instead of generic test sets, a bot's ev
 
 ## Setup
 
-Requires Python 3.11 on Windows (the pinned requirements include Windows-only packages; see [ADR 0004](docs/adr/0004-pin-all-dependency-versions.md)).
+Requires Python 3.11, on Windows or Linux ([ADR 0023](docs/adr/0023-run-on-linux-codespaces-and-ci.md)). The easiest start is a GitHub Codespace: on GitHub, choose **Code → Codespaces → Create codespace**, and the dev container installs everything. Add `OPENROUTER_API_KEY` as a Codespaces secret (GitHub → Settings → Codespaces → Secrets) instead of a `.env` file.
+
+Every push runs the tests on Linux in GitHub Actions. To run them yourself:
+
+```bash
+python -m unittest discover -s tests -t .
+```
+
+On your own machine:
 
 ```bash
 python -m venv .venv

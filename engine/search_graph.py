@@ -18,7 +18,6 @@ collection and subject, so a bot can only ever search its own documents.
 
 import re
 import threading
-from collections import OrderedDict
 from pathlib import Path
 from typing import TypedDict
 
@@ -28,6 +27,7 @@ from langchain_core.tools import StructuredTool
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
+from engine import shared
 from engine.retrieval import CLEAN_COLLECTION, get_retriever
 from engine.step1_ingest import format_page
 from engine.llm import STRUCTURED_METHOD
@@ -40,11 +40,11 @@ VERBOSE = True  # print each attempt; the eval runner turns this off
 # similarity, but "does the relationship matter more than technique?" and its
 # reverse scored 0.99. No threshold separates right hits from wrong ones.
 # Step 10: the key starts with the collection, so bots never share entries.
+# Lampus Phase 1, Step 7: the cache lives in Redis (engine/shared.py), so every API
+# copy shares it, and re-ingesting a bot's documents invalidates its entries.
 CACHE_ENABLED = True  # the eval runner turns this off, so cases stay independent
-CACHE_SIZE = 256
-_cache: OrderedDict[str, str] = OrderedDict()
-_cache_lock = threading.Lock()
-cache_stats = {"hits": 0, "misses": 0}
+_stats_lock = threading.Lock()
+cache_stats = {"hits": 0, "misses": 0}  # this process's own hits and misses
 
 STUDY_SUBJECT = "the course material on counselling and psychotherapy"
 
@@ -150,18 +150,15 @@ def cache_key(collection: str, question: str) -> str:
 def search(collection: str, subject: str, question: str, query: str) -> str:
     key = cache_key(collection, question)
     if CACHE_ENABLED:
-        with _cache_lock:
-            if key in _cache:
-                _cache.move_to_end(key)  # least recently used is evicted first
-                cache_stats["hits"] += 1
-                return _cache[key]
-            cache_stats["misses"] += 1
+        cached = shared.cache_get(collection, key)
+        with _stats_lock:
+            cache_stats["hits" if cached is not None else "misses"] += 1
+        if cached is not None:
+            return cached
     output = _search(collection, subject, question, query)
     if CACHE_ENABLED:
-        with _cache_lock:
-            _cache[key] = output
-            if len(_cache) > CACHE_SIZE:
-                _cache.popitem(last=False)
+        # Redis evicts the least recently used entries when full (docker-compose.yml).
+        shared.cache_put(collection, key, output)
     return output
 
 

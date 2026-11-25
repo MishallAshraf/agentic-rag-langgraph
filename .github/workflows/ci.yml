@@ -24,10 +24,18 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U lampus -d lampus"
           --health-interval 2s --health-timeout 3s --health-retries 30
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s --health-timeout 3s --health-retries 30
     env:
       OPENROUTER_API_KEY: placeholder-not-a-key
       LLM_BASE_URL: http://127.0.0.1:9/v1
       DATABASE_URL: postgresql://lampus:lampus@localhost:5432/lampus
+      REDIS_URL: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

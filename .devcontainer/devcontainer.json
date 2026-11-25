@@ -17,8 +17,8 @@
   // Runs once when the Codespace is created. The secret OPENROUTER_API_KEY comes from
   // GitHub -> Settings -> Codespaces -> Secrets, never from a file in the repository.
   "postCreateCommand": "pip install -r requirements.txt && cd frontend && npm ci",
-  // Start Postgres (and later Redis) each time the Codespace starts.
-  "postStartCommand": "docker compose up -d db",
+  // Start Postgres and Redis each time the Codespace starts.
+  "postStartCommand": "docker compose up -d db redis",
   "forwardPorts": [8000, 5173],
   "portsAttributes": {
     "8000": { "label": "API" },

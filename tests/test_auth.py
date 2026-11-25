@@ -190,6 +190,18 @@ class AuthTests(unittest.TestCase):
         self.assertNotEqual(notes_dir(bot, "alice"), notes_dir(bot, "bob"))
         self.assertEqual(notes_dir(bot, "alice").parent, notes_dir(bot))
 
+    def test_busy_conversation_refused_even_if_another_copy_holds_it(self):
+        # The lock is in Redis, so a turn running on ANOTHER API copy blocks this one too.
+        from engine import shared
+        thread = self.bob.post("/bots/architecture_guide/threads").json()["thread_id"]
+        name = f"thread:architecture_guide:{thread}"
+        token = asyncio.run(shared.acquire_lock(name, 30))  # "another copy" is mid-turn
+        try:
+            r = self.bob.post(f"/bots/architecture_guide/threads/{thread}/messages", json={"text": "hello"})
+            self.assertEqual(r.status_code, 409)
+        finally:
+            asyncio.run(shared.release_lock(name, token))
+
     # ------------------------------------------------------------ quotas
 
     def test_daily_turn_quota_is_enforced_before_any_model_call(self):

@@ -32,6 +32,7 @@ An ADR records one significant decision: the context, what was decided, the alte
 | [0026](0026-conversations-in-postgres.md) | Conversations (LangGraph checkpoints) in Postgres on their own pool, with a checked migration from SQLite | Accepted |
 | [0027](0027-pgvector-as-vector-store.md) | Document chunks in Postgres with pgvector; exact search per bot, HNSW measured | Accepted |
 | [0028](0028-data-lineage-and-incremental-ingestion.md) | Data lineage (file hashes, ingest runs) and incremental ingestion | Accepted |
+| [0029](0029-redis-for-shared-limits-locks-and-cache.md) | Redis for rate limits (token buckets per student and bot), conversation locks and the search cache | Accepted |
 
 Statuses: **Proposed** (under discussion), **Accepted**, **Superseded by NNNN** (replaced by a later decision; the old record is kept, not edited).
 

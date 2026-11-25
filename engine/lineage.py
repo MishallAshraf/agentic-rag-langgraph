@@ -26,6 +26,7 @@ from pathlib import Path
 from langchain_core.documents import Document
 from psycopg.types.json import Jsonb
 
+from engine import shared
 from engine.step1_ingest import CHUNK_OVERLAP, CHUNK_SIZE
 from engine.vectorstore import EMBEDDING_MODEL, ROOT, get_pool, get_vectorstore, to_vector
 
@@ -143,6 +144,8 @@ def sync(collection: str, folder: Path, files: list[Path], chunk_file: Callable[
                 {**stats, "id": run_id})
         finally:
             conn.execute("SELECT pg_advisory_unlock(hashtext(%s))", (f"lampus.ingest.{collection}",))
+    if stats["files_changed"] or stats["files_removed"]:
+        shared.invalidate(collection)  # cached search results may quote old text (Step 7)
     return {**stats, "run": run_id, "chunks": store.count()}
 
 

@@ -67,8 +67,14 @@ async def postgres_checkpointer(url: str = DATABASE_URL):
         saver = AsyncPostgresSaver(pool)
         # setup() creates and migrates LangGraph's tables. Hold a session lock on a
         # separate connection meanwhile, so two processes starting together don't race.
+        # Wait for it by polling, never with a blocking pg_advisory_lock(): a waiting
+        # statement keeps a transaction open, and setup()'s CREATE INDEX CONCURRENTLY
+        # waits for every open transaction to end, so the two copies would wait for each
+        # other forever (found starting two API copies at once, Phase 1 Step 7).
         async with pool.connection() as lock_conn:
-            await lock_conn.execute("SELECT pg_advisory_lock(hashtext('lampus.checkpoints'))")
+            while not (await (await lock_conn.execute(
+                    "SELECT pg_try_advisory_lock(hashtext('lampus.checkpoints')) AS ok")).fetchone())["ok"]:
+                await asyncio.sleep(0.2)
             try:
                 await saver.setup()
             finally:

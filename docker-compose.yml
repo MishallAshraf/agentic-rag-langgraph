@@ -1,9 +1,9 @@
 # Local services for the engine (Lampus Phase 1). Run in a Codespace or anywhere with Docker:
 #
-#   docker compose up -d db        # Postgres on localhost:5432
+#   docker compose up -d db redis  # Postgres on localhost:5432, Redis on localhost:6379
 #   python -m engine.api           # the API, using DATABASE_URL from .env (or the default below)
 #
-# Later Phase 1 steps add Redis, a queue worker, several API copies and a load balancer here.
+# Later Phase 1 steps add a queue worker, several API copies and a load balancer here.
 
 services:
   db:
@@ -19,6 +19,21 @@ services:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U lampus -d lampus"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    # Shared state for every API copy: rate limits, conversation locks, the search
+    # cache (Phase 1, Step 7). Kept in memory only: losing it loses nothing that matters
+    # (limits refill, locks expire, the cache refills), so there is no volume.
+    image: redis:7.4-alpine
+    # At most 256 MB; when full, evict the least recently used keys first.
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 2s
       timeout: 3s
       retries: 30

@@ -52,7 +52,6 @@ import re
 import sys
 import time
 import uuid
-from collections import defaultdict, deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -73,6 +72,7 @@ from engine import analysis
 from engine import step9_agent
 from engine import step14_research
 from engine.auth import SESSION_TTL_S, AuthStore, User
+from engine import shared
 from engine.db import postgres_checkpointer
 from engine.builds import MAX_FILE_BYTES, MAX_FILES, MAX_TOTAL_BYTES, Build, BuildManager, UploadProblem
 from engine.bot_config import BotConfig, Theme, load_bot
@@ -84,8 +84,8 @@ log = logging.getLogger("api")
 
 BOTS_DIR = Path(__file__).resolve().parent.parent / "bots"
 TURN_TIMEOUT_S = float(os.getenv("API_TURN_TIMEOUT", "120"))  # latency budget for one turn
-RATE_LIMIT = int(os.getenv("API_RATE_LIMIT", "10"))            # turns per user per window
-RATE_WINDOW_S = 60
+RATE_LIMIT = int(os.getenv("API_RATE_LIMIT", "10"))            # turns per student per minute (and burst)
+BOT_RATE_LIMIT = int(os.getenv("API_BOT_RATE_LIMIT", "300"))    # turns per bot (a school's tutor) per minute
 LOGIN_LIMIT = 5                                                # sign-in attempts per address and name per minute
 MAX_MESSAGE_CHARS = 4000
 CORS_ORIGINS = os.getenv("API_CORS_ORIGINS", "http://localhost:5173").split(",")  # Vite dev server
@@ -111,7 +111,6 @@ class Platform:
     def __init__(self, checkpointer, llm):
         self.checkpointer, self.llm = checkpointer, llm
         self.bots: dict[str, BotEntry] = {}
-        self.thread_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
     def load_bots(self):
         for path in sorted(BOTS_DIR.glob("*.yaml")):
@@ -142,25 +141,6 @@ class Platform:
         return entry.graphs[key]
 
 
-class RateLimiter:
-    """Sliding window per key: at most `limit` requests in `window` seconds."""
-
-    def __init__(self, limit: int, window: float):
-        self.limit, self.window = limit, window
-        self.hits: dict[str, deque] = defaultdict(deque)
-
-    def retry_after(self, key: str, record: bool = True) -> int:
-        """0 if the request may go ahead (and, if record, count it), else seconds to wait."""
-        now, hits = time.monotonic(), self.hits[key]
-        while hits and now - hits[0] > self.window:
-            hits.popleft()
-        if len(hits) >= self.limit:
-            return int(self.window - (now - hits[0])) + 1
-        if record:
-            hits.append(now)
-        return 0
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from engine.llm import get_llm
@@ -170,8 +150,9 @@ async def lifespan(app: FastAPI):
         async with postgres_checkpointer() as checkpointer:  # conversations (Lampus Phase 1, Step 4)
             app.state.platform = Platform(checkpointer, get_llm())
             app.state.platform.load_bots()
-            app.state.limiter = RateLimiter(RATE_LIMIT, RATE_WINDOW_S)
-            app.state.login_limiter = RateLimiter(LOGIN_LIMIT, 60)
+            # Shared by every API copy through Redis (Lampus Phase 1, Step 7).
+            app.state.limiter = shared.RateLimiter()
+            app.state.login_limiter = shared.FailureCounter(LOGIN_LIMIT, 60)
             app.state.builds = make_build_manager(app.state.platform)
             try:
                 yield
@@ -299,8 +280,11 @@ async def config_for(request: Request, user: User, entry: BotEntry, thread_id: s
     return config
 
 
-def rate_limit(request: Request, user: User):
-    wait = request.app.state.limiter.retry_after(user.username)
+async def rate_limit(request: Request, user: User, bot_id: str):
+    # Two token buckets: the student's own, and the bot's (a school's tutor), so one
+    # busy school can't use up the capacity every other school shares.
+    wait = await request.app.state.limiter.take({f"student:{user.username}": (RATE_LIMIT, RATE_LIMIT),
+                                                 f"bot:{bot_id}": (BOT_RATE_LIMIT, BOT_RATE_LIMIT)})
     if wait:
         raise HTTPException(429, "Too many messages; slow down.", headers={"Retry-After": str(wait)})
 
@@ -310,6 +294,28 @@ async def check_quota(request: Request, user: User, bot_id: str):
     if problem:
         await request.app.state.auth.audit(user.username, "quota.exceeded", bot_id=bot_id, ip=client_ip(request))
         raise HTTPException(429, problem)
+
+
+async def conversation_lock(bot_id: str, thread_id: str):
+    """One turn at a time per conversation, across every API copy (a lock in Redis).
+
+    Two turns writing one conversation at once would interleave its checkpoints.
+    Returns the function that frees the lock; raises 409 if another turn holds it.
+    The lock expires after the longest a turn may take, so a crashed copy can't
+    leave a conversation locked for good.
+    """
+    name = f"thread:{bot_id}:{thread_id}"
+    token = await shared.acquire_lock(name, TURN_TIMEOUT_S + 60)
+    if token is None:
+        raise HTTPException(409, "A reply in this conversation is still being written.")
+
+    async def release():
+        try:
+            await shared.release_lock(name, token)
+        except Exception as e:  # noqa: BLE001 - the lock still expires by itself
+            log.error("could not release %s: %s", name, e)
+
+    return release
 
 
 # ------------------------------------------------------------------ streaming a turn
@@ -377,15 +383,16 @@ async def final_event(graph, config) -> ServerSentEvent:
                           "guard": (state.get("guard") or "ok").split(":")[0]})
 
 
-async def stream_turn(graph, config, graph_input, lock: asyncio.Lock, on_end):
+async def stream_turn(graph, config, graph_input, release, on_end):
     """Run one turn (or the rest of a paused one) and yield its events.
 
-    on_end(tokens, result) runs however the turn ends, to record usage and audit it.
+    The caller holds the conversation's lock; release() frees it when the turn
+    ends. on_end(tokens, result) runs however the turn ends, to record usage and audit it.
     """
     usage = UsageMetadataCallbackHandler()  # counts tokens of every model call in the turn
     config = {**config, "callbacks": [usage]}
     result = "done"
-    async with lock:  # one turn at a time per conversation
+    try:
         try:
             # Sent at once: the input check alone takes 1-7 s, and silence feels like a hang.
             yield event("status", {"stage": "received"})
@@ -429,6 +436,8 @@ async def stream_turn(graph, config, graph_input, lock: asyncio.Lock, on_end):
                 await asyncio.shield(on_end(tokens, result))
             except Exception as e:  # noqa: BLE001 - bookkeeping must never break the reply
                 log.error("could not record the turn: %s", e)
+    finally:
+        await asyncio.shield(release())
 
 
 def turn_recorder(request: Request, user: User, graph, config, bot_id: str, thread_id: str):
@@ -451,14 +460,14 @@ def turn_recorder(request: Request, user: User, graph, config, bot_id: str, thre
 async def login(request: Request, response: Response, body: LoginIn):
     auth, ip = request.app.state.auth, client_ip(request)
     limiter, key = request.app.state.login_limiter, f"{ip}|{body.username}"
-    wait = limiter.retry_after(key, record=False)  # only failures count, so signing in often is fine
+    wait = await limiter.retry_after(key)  # only failures count, so signing in often is fine
     if wait:  # slows down password guessing
         await auth.audit(body.username[:64], "auth.login_blocked", ip=ip)
         raise HTTPException(429, "Too many sign-in attempts. Try again in a minute.",
                             headers={"Retry-After": str(wait)})
     user = await auth.authenticate(body.username, body.password)
     if user is None:
-        limiter.retry_after(key)  # count the failure
+        await limiter.failed(key)
         await auth.audit(body.username[:64], "auth.login_failed", ip=ip)
         raise HTTPException(401, "Wrong username or password.")  # never says which one
     token = await auth.start_session(user.username)
@@ -539,26 +548,28 @@ async def send_message(request: Request, bot_id: str, thread_id: str, body: Mess
                        user: User = Depends(current_user)):
     entry, platform, auth = await bot_for(request, user, bot_id), request.app.state.platform, request.app.state.auth
     await own_thread(request, user, bot_id, thread_id)
-    rate_limit(request, user)
+    await rate_limit(request, user, bot_id)
     await check_quota(request, user, bot_id)
     graph = await platform.graph_for(entry, user)
     config = await config_for(request, user, entry, thread_id)
-    lock = platform.thread_locks[f"{bot_id}:{thread_id}"]
-    if lock.locked():
-        raise HTTPException(409, "A reply in this conversation is still being written.")
-    if await pending_approval(graph, config):
-        raise HTTPException(409, "This conversation is waiting for an approval decision.")
-    # Counted when it starts, in one conditional write, so parallel conversations
-    # cannot overrun the turn quota (check_quota above is only the early, cheap check).
-    problem = await auth.reserve_turn(user.username)
-    if problem:
-        await auth.audit(user.username, "quota.exceeded", bot_id=bot_id, ip=client_ip(request))
-        raise HTTPException(429, problem)
+    release = await conversation_lock(bot_id, thread_id)
+    try:
+        if await pending_approval(graph, config):
+            raise HTTPException(409, "This conversation is waiting for an approval decision.")
+        # Counted when it starts, in one conditional write, so parallel conversations
+        # cannot overrun the turn quota (check_quota above is only the early, cheap check).
+        problem = await auth.reserve_turn(user.username)
+        if problem:
+            await auth.audit(user.username, "quota.exceeded", bot_id=bot_id, ip=client_ip(request))
+            raise HTTPException(429, problem)
+    except BaseException:
+        await release()
+        raise
     await auth.audit(user.username, "turn.start", bot_id=bot_id, thread_id=thread_id, ip=client_ip(request),
                      detail={"chars": len(body.text)})
     graph_input = {"messages": [HumanMessage(body.text)]}
     on_end = turn_recorder(request, user, graph, config, bot_id, thread_id)
-    return EventSourceResponse(stream_turn(graph, config, graph_input, lock, on_end), ping=15)
+    return EventSourceResponse(stream_turn(graph, config, graph_input, release, on_end), ping=15)
 
 
 @app.post("/bots/{bot_id}/threads/{thread_id}/approval")
@@ -566,21 +577,21 @@ async def send_approval(request: Request, bot_id: str, thread_id: str, body: App
                         user: User = Depends(current_user)):
     entry, platform, auth = await bot_for(request, user, bot_id), request.app.state.platform, request.app.state.auth
     await own_thread(request, user, bot_id, thread_id)
-    rate_limit(request, user)
+    await rate_limit(request, user, bot_id)
     graph = await platform.graph_for(entry, user)
     config = await config_for(request, user, entry, thread_id)
-    lock = platform.thread_locks[f"{bot_id}:{thread_id}"]
-    if lock.locked():
-        raise HTTPException(409, "A reply in this conversation is still being written.")
+    release = await conversation_lock(bot_id, thread_id)
     waiting = await pending_approval(graph, config)
     if not waiting:
+        await release()
         raise HTTPException(409, "Nothing in this conversation is waiting for approval.")
     # Who approved what: the tools and the decision (the arguments are the user's own data).
     await auth.audit(user.username, "approval.decision", bot_id=bot_id, thread_id=thread_id,
                      ip=client_ip(request), detail={"decision": body.decision,
                                                     "tools": [c["name"] for c in waiting["tool_calls"]]})
     on_end = turn_recorder(request, user, graph, config, bot_id, thread_id)
-    return EventSourceResponse(stream_turn(graph, config, Command(resume=body.decision), lock, on_end), ping=15)
+    return EventSourceResponse(stream_turn(graph, config, Command(resume=body.decision), release, on_end),
+                               ping=15)
 
 
 # ------------------------------------------------------------------ routes: admin

@@ -6,7 +6,7 @@ The model is faked (`mock_llm.py`): it speaks the OpenAI API with a fixed delay 
 
 ## How to run
 
-Three terminals in the repository root, with Postgres running (`docker compose up -d db`). The API uses its own `loadtest` schema in Postgres, so your real users and conversations are untouched. Create the schema once:
+Three terminals in the repository root, with Postgres and Redis running (`docker compose up -d db redis`). The API uses its own `loadtest` schema in Postgres, so your real users and conversations are untouched. Create the schema once:
 
 ```powershell
 docker compose exec db psql -U lampus -c "CREATE SCHEMA IF NOT EXISTS loadtest"
@@ -144,3 +144,24 @@ Same laptop, 2026-11-25. See [ADR 0028](../docs/adr/0028-data-lineage-and-increm
 | One file edited | 225, 130 s | 1, 0.4 s |
 
 Before, every ingest deleted the collection and embedded everything again. Now an unchanged file is recognised by its hash and skipped, and in an edited file only chunks whose text changed are embedded. The before times vary a lot (108 s to 194 s for the same work): the laptop's CPU is shared with everything else running on it.
+
+### Step 7: shared state in Redis, measured with two API copies
+
+GitHub Codespace (2 cores, Linux), 2026-11-25. See [ADR 0029](../docs/adr/0029-redis-for-shared-limits-locks-and-cache.md).
+
+From this step on, the load tests run in the Codespace, which has Docker for Postgres and Redis. Start the fake model and N API copies (ports 8001, 8002, ...) with one script, then run the check:
+
+```bash
+API_RATE_LIMIT=10 bash loadtest/start_copies.sh 2
+python loadtest/bench_shared_state.py
+bash loadtest/start_copies.sh stop
+```
+
+The script also ingests the café bot into the `loadtest` schema: since Step 5 the documents are in Postgres, so each schema needs its own chunks.
+
+| Check | Before: memory in each copy | After: Redis |
+| --- | --- | --- |
+| One student sends 30 messages in a burst over both copies (limit 10 a minute) | 20 started | 10 started, 20 refused (429) |
+| Two messages to one conversation at the same moment, one per copy | both ran | 1 ran, 1 refused (409) |
+
+Starting two copies at once on a fresh database first hung both forever. LangGraph's table setup builds an index with `CREATE INDEX CONCURRENTLY`, which waits for every open transaction to finish, including the other copy's blocking wait for the setup lock. `engine/db.py` now polls for that lock instead.

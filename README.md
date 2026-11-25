@@ -42,7 +42,7 @@ Step 16 is done: an improvement loop. A red-team agent attacks a bot with realis
 
 Step 17 is in progress: error analysis. Instead of generic test sets, a bot's evaluation set is built from its own conversations: synthetic messages spread over how its users differ, labelled by a domain expert on a review page, grouped into the bot's own failure modes, with one judge per mode checked against the expert's labels. The café bot's 50 conversations are ready for labelling.
 
-Lampus Phase 1 is in progress: the engine is being made production-ready for [Lampus](lampus/README.md), a tutoring product built on it. Done so far: a load-test harness with a fake model ([loadtest](loadtest/README.md)), Linux support with CI, the `engine/` and `lampus/` folders ([ADR 0024](docs/adr/0024-engine-and-lampus-folders.md)), Postgres for users, quotas and the audit log, which took sign-in failures at 10 students at once from 90% to 0% ([ADR 0025](docs/adr/0025-postgres-for-users-quotas-and-audit.md)), conversations in Postgres too ([ADR 0026](docs/adr/0026-conversations-in-postgres.md)), document chunks moved from Chroma to Postgres with pgvector ([ADR 0027](docs/adr/0027-pgvector-as-vector-store.md)), and data lineage, which also makes re-indexing incremental: after one file is edited, 1 chunk is embedded instead of 225 ([ADR 0028](docs/adr/0028-data-lineage-and-incremental-ingestion.md)).
+Lampus Phase 1 is in progress: the engine is being made production-ready for [Lampus](lampus/README.md), a tutoring product built on it. Done so far: a load-test harness with a fake model ([loadtest](loadtest/README.md)), Linux support with CI, the `engine/` and `lampus/` folders ([ADR 0024](docs/adr/0024-engine-and-lampus-folders.md)), Postgres for users, quotas and the audit log, which took sign-in failures at 10 students at once from 90% to 0% ([ADR 0025](docs/adr/0025-postgres-for-users-quotas-and-audit.md)), conversations in Postgres too ([ADR 0026](docs/adr/0026-conversations-in-postgres.md)), document chunks moved from Chroma to Postgres with pgvector ([ADR 0027](docs/adr/0027-pgvector-as-vector-store.md)), and data lineage, which also makes re-indexing incremental: after one file is edited, 1 chunk is embedded instead of 225 ([ADR 0028](docs/adr/0028-data-lineage-and-incremental-ingestion.md)), and Redis for the rate limits, conversation locks and search cache, so they hold across several API copies: with two copies, a student limited to 10 messages a minute got 20 through before and 10 after ([ADR 0029](docs/adr/0029-redis-for-shared-limits-locks-and-cache.md)).
 
 ## Repository layout
 
@@ -74,10 +74,10 @@ python -m venv .venv
 
 The embedding model downloads automatically on the first run.
 
-Users, sessions, quotas, the audit log, conversations and document chunks (with pgvector) are stored in Postgres ([ADR 0025](docs/adr/0025-postgres-for-users-quotas-and-audit.md), [ADR 0026](docs/adr/0026-conversations-in-postgres.md), [ADR 0027](docs/adr/0027-pgvector-as-vector-store.md)). In a Codespace it starts by itself; elsewhere, with Docker:
+Users, sessions, quotas, the audit log, conversations and document chunks (with pgvector) are stored in Postgres ([ADR 0025](docs/adr/0025-postgres-for-users-quotas-and-audit.md), [ADR 0026](docs/adr/0026-conversations-in-postgres.md), [ADR 0027](docs/adr/0027-pgvector-as-vector-store.md)). Rate limits, conversation locks and the search cache are in Redis ([ADR 0029](docs/adr/0029-redis-for-shared-limits-locks-and-cache.md)). In a Codespace both start by themselves; elsewhere, with Docker:
 
 ```bash
-docker compose up -d db
+docker compose up -d db redis
 ```
 
 Any other Postgres works too: set `DATABASE_URL` in `.env`. The tests use the same database (each run makes and drops its own schema). The Postgres server needs the pgvector extension (the `pgvector/pgvector` image has it). If you used the engine before this change, copy your users, audit log, conversations and document chunks across once:

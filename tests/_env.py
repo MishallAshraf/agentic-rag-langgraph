@@ -34,5 +34,7 @@ def _drop_schema():
         conn.execute(f"DROP SCHEMA IF EXISTS {SCHEMA} CASCADE")
 
 
+# Redis keys (rate limits, locks, cache) get the same unique prefix, so runs never share them.
+os.environ["REDIS_PREFIX"] = f"{SCHEMA}:"
 os.environ["QUOTA_TURNS_PER_DAY"] = "3"
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))

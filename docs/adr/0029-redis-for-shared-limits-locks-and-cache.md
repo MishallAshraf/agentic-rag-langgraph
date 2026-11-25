@@ -1,6 +1,6 @@
 # 0029. Redis for rate limits, conversation locks and the search cache
 
-- Status: Accepted
+- Status: Accepted; the conversation lock's 3-minute lifetime is superseded by [ADR 0031](0031-scale-out-nginx-and-read-replica.md) (15 s, renewed while the turn runs)
 - Date: 2026-11-25
 - Step: Lampus Phase 1, Step 7
 

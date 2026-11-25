@@ -8,8 +8,10 @@ filter (body chunks only) works, and one bot can never see or wipe another
 bot's chunks.
 """
 
+import os
 import secrets
 import sys
+import time
 import unittest
 from pathlib import Path
 
@@ -53,6 +55,29 @@ class VectorStoreTest(unittest.TestCase):
         self.a.reset_collection()
         self.assertEqual(self.a.count(), 0)
         self.assertEqual(self.b.count(), 1)
+
+    def test_searches_on_a_replica_and_falls_back_to_the_primary(self):
+        from engine import vectorstore
+        primary = self.a.similarity_search_by_vector(unit(1), k=3)
+        # The "replica" here is the same database through the read pool: the results
+        # must be the same as from the primary.
+        replica = VectorStore(self.a.collection, read_url=os.environ["DATABASE_URL"])
+        self.assertIsNotNone(replica.read_pool)
+        self.assertEqual([d.id for d in replica.similarity_search_by_vector(unit(1), k=3)], [d.id for d in primary])
+        # A replica nobody answers on: the search still works, from the primary, and
+        # the next searches don't wait for the replica again.
+        dead = VectorStore(self.a.collection, read_url=os.environ["DATABASE_URL"] + " port=1 connect_timeout=1")
+        old = vectorstore.REPLICA_WAIT_S, vectorstore._replica_down_until
+        vectorstore.REPLICA_WAIT_S = 0.5
+        try:
+            with self.assertLogs("vectorstore", "WARNING"):
+                self.assertEqual([d.id for d in dead.similarity_search_by_vector(unit(1), k=3)],
+                                 [d.id for d in primary])
+            start = time.monotonic()
+            dead.similarity_search_by_vector(unit(1), k=3)
+            self.assertLess(time.monotonic() - start, 0.4)
+        finally:
+            vectorstore.REPLICA_WAIT_S, vectorstore._replica_down_until = old
 
     def test_get_and_reingest(self):
         self.assertEqual([d.id for d in self.a.get(where={"section": "body"})], ["far", "middle", "near"])

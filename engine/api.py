@@ -84,6 +84,12 @@ log = logging.getLogger("api")
 
 BOTS_DIR = Path(__file__).resolve().parent.parent / "bots"
 TURN_TIMEOUT_S = float(os.getenv("API_TURN_TIMEOUT", "120"))  # latency budget for one turn
+# Threads for the agents' synchronous tools (the document search). Python's default is
+# min(32, CPU cores + 4): 6 on a 2-core machine, so one copy ran only 6 searches at once
+# and the rest queued (measured in Lampus Phase 1, Step 9). 0 keeps Python's default.
+TOOL_THREADS = int(os.getenv("API_TOOL_THREADS", "0"))
+# A conversation lock lasts this long unless its turn renews it (see conversation_lock).
+LOCK_TTL_S = float(os.getenv("API_LOCK_TTL", "15"))
 RATE_LIMIT = int(os.getenv("API_RATE_LIMIT", "10"))            # turns per student per minute (and burst)
 BOT_RATE_LIMIT = int(os.getenv("API_BOT_RATE_LIMIT", "300"))    # turns per bot (a school's tutor) per minute
 # Run queued bot builds inside this process too (Step 8). On by default so one command
@@ -148,6 +154,9 @@ class Platform:
 async def lifespan(app: FastAPI):
     from engine.llm import get_llm
 
+    if TOOL_THREADS:
+        from concurrent.futures import ThreadPoolExecutor
+        asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(TOOL_THREADS, thread_name_prefix="tool"))
     app.state.auth = await AuthStore().open()
     try:
         async with postgres_checkpointer() as checkpointer:  # conversations (Lampus Phase 1, Step 4)
@@ -340,15 +349,34 @@ async def conversation_lock(bot_id: str, thread_id: str):
 
     Two turns writing one conversation at once would interleave its checkpoints.
     Returns the function that frees the lock; raises 409 if another turn holds it.
-    The lock expires after the longest a turn may take, so a crashed copy can't
-    leave a conversation locked for good.
+
+    The lock lasts LOCK_TTL_S and is renewed every third of that while the turn
+    runs. If this copy crashes, renewal stops and the conversation is free again
+    within LOCK_TTL_S. (Until Phase 1, Step 9 the lock simply lasted as long as the
+    longest turn, 3 minutes: after a crash, every student whose conversation was on
+    that copy got 409s for up to 3 minutes.) Renewal itself stops after the longest
+    a turn may take, so a lock whose release was missed can't live on forever.
     """
     name = f"thread:{bot_id}:{thread_id}"
-    token = await shared.acquire_lock(name, TURN_TIMEOUT_S + 60)
+    token = await shared.acquire_lock(name, LOCK_TTL_S)
     if token is None:
         raise HTTPException(409, "A reply in this conversation is still being written.")
 
+    async def renew():
+        deadline = time.monotonic() + TURN_TIMEOUT_S + 60
+        while time.monotonic() < deadline:
+            await asyncio.sleep(LOCK_TTL_S / 3)
+            try:
+                if not await shared.extend_lock(name, token, LOCK_TTL_S):
+                    log.error("lost the lock on %s", name)
+                    return
+            except Exception as e:  # noqa: BLE001 - Redis away: try again next time
+                log.warning("could not renew %s: %s", name, e)
+
+    renewing = asyncio.create_task(renew())
+
     async def release():
+        renewing.cancel()
         try:
             await shared.release_lock(name, token)
         except Exception as e:  # noqa: BLE001 - the lock still expires by itself
@@ -797,5 +825,10 @@ if __name__ == "__main__":
     # before this may listen on a network.
     # On Windows, "none" makes uvicorn use the Selector loop engine.db asks for (uvicorn's
     # own Windows default, Proactor, can't run psycopg in async mode). Linux keeps uvicorn's default.
+    # Behind nginx (Phase 1, Step 9) every request comes from nginx's address; the
+    # X-Forwarded-For header carries the student's, which the sign-in limiter needs.
+    # It is believed only from the addresses in FORWARDED_ALLOW_IPS (nginx's), or anyone
+    # could claim any address.
     uvicorn.run(app, host="127.0.0.1", port=int(os.getenv("API_PORT", "8000")),
-                loop="none" if sys.platform == "win32" else "auto")
+                loop="none" if sys.platform == "win32" else "auto",
+                proxy_headers=True, forwarded_allow_ips=os.getenv("FORWARDED_ALLOW_IPS", "127.0.0.1"))

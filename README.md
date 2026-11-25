@@ -42,14 +42,14 @@ Step 16 is done: an improvement loop. A red-team agent attacks a bot with realis
 
 Step 17 is in progress: error analysis. Instead of generic test sets, a bot's evaluation set is built from its own conversations: synthetic messages spread over how its users differ, labelled by a domain expert on a review page, grouped into the bot's own failure modes, with one judge per mode checked against the expert's labels. The café bot's 50 conversations are ready for labelling.
 
-Lampus Phase 1 is in progress: the engine is being made production-ready for [Lampus](lampus/README.md), a tutoring product built on it. Done so far: a load-test harness with a fake model ([loadtest](loadtest/README.md)), Linux support with CI, the `engine/` and `lampus/` folders ([ADR 0024](docs/adr/0024-engine-and-lampus-folders.md)), Postgres for users, quotas and the audit log, which took sign-in failures at 10 students at once from 90% to 0% ([ADR 0025](docs/adr/0025-postgres-for-users-quotas-and-audit.md)), conversations in Postgres too ([ADR 0026](docs/adr/0026-conversations-in-postgres.md)), document chunks moved from Chroma to Postgres with pgvector ([ADR 0027](docs/adr/0027-pgvector-as-vector-store.md)), and data lineage, which also makes re-indexing incremental: after one file is edited, 1 chunk is embedded instead of 225 ([ADR 0028](docs/adr/0028-data-lineage-and-incremental-ingestion.md)), and Redis for the rate limits, conversation locks and search cache, so they hold across several API copies: with two copies, a student limited to 10 messages a minute got 20 through before and 10 after ([ADR 0029](docs/adr/0029-redis-for-shared-limits-locks-and-cache.md)), and bot builds through a queue to a separate worker, so a build survives the API copy that started it and the worker running it: before, killing the copy lost the build; now it finishes, and a dead worker's build is taken over by another ([ADR 0030](docs/adr/0030-build-queue-and-worker.md)).
+Lampus Phase 1 is in progress: the engine is being made production-ready for [Lampus](lampus/README.md), a tutoring product built on it. Done so far: a load-test harness with a fake model ([loadtest](loadtest/README.md)), Linux support with CI, the `engine/` and `lampus/` folders ([ADR 0024](docs/adr/0024-engine-and-lampus-folders.md)), Postgres for users, quotas and the audit log, which took sign-in failures at 10 students at once from 90% to 0% ([ADR 0025](docs/adr/0025-postgres-for-users-quotas-and-audit.md)), conversations in Postgres too ([ADR 0026](docs/adr/0026-conversations-in-postgres.md)), document chunks moved from Chroma to Postgres with pgvector ([ADR 0027](docs/adr/0027-pgvector-as-vector-store.md)), and data lineage, which also makes re-indexing incremental: after one file is edited, 1 chunk is embedded instead of 225 ([ADR 0028](docs/adr/0028-data-lineage-and-incremental-ingestion.md)), and Redis for the rate limits, conversation locks and search cache, so they hold across several API copies: with two copies, a student limited to 10 messages a minute got 20 through before and 10 after ([ADR 0029](docs/adr/0029-redis-for-shared-limits-locks-and-cache.md)), and bot builds through a queue to a separate worker, so a build survives the API copy that started it and the worker running it: before, killing the copy lost the build; now it finishes, and a dead worker's build is taken over by another ([ADR 0030](docs/adr/0030-build-queue-and-worker.md)), and three API copies behind nginx with a read replica for searches: when one copy is killed under load, every student is answered again within 20 s, where with one copy none was. Measuring it also found and fixed a hang: one copy under 50 students had stopped for good ([ADR 0031](docs/adr/0031-scale-out-nginx-and-read-replica.md)).
 
 ## Repository layout
 
 - `engine/`: the bot builder: agents, retrieval, guardrails, sign-in, the API and the builder. Run its commands from the repository root as modules, for example `python -m engine.api`.
 - `lampus/`: the tutoring product built on the engine (starts in Phase 2).
 - `archive/steps/`: early learning steps (1–3 and the Step 6 comparison) that nothing imports any more, kept runnable for history.
-- `bots/`, `evals/`, `frontend/`, `mcp_servers/`, `tests/`, `loadtest/`: bot configurations, evaluation, the web app, the MCP notes server, tests and load tests.
+- `bots/`, `evals/`, `frontend/`, `mcp_servers/`, `tests/`, `loadtest/`, `deploy/`: bot configurations, evaluation, the web app, the MCP notes server, tests, load tests, and the nginx and replica settings.
 - `docs/`: roadmap and architecture decision records.
 
 ## Setup
@@ -303,6 +303,14 @@ python -m engine.worker
 ```
 
 The builder uses `BUILDER_MODEL` (Sonnet 5.5 by default). If port 8000 is taken, run the API with `API_PORT=8001` and start Vite with the same variable. See [ADR 0020](docs/adr/0020-bot-builder-as-a-service.md).
+
+To run several API copies behind nginx (port 8000) with a read replica of Postgres for searches, start the copies on ports 8001-8003 and then ([ADR 0031](docs/adr/0031-scale-out-nginx-and-read-replica.md)):
+
+```bash
+docker compose --profile scale up -d nginx db-replica
+```
+
+Give each copy `DATABASE_READ_URL` pointing at the replica (port 5433). `loadtest/start_copies.sh` does all of this for the load tests.
 
 ## Step 16: the improvement loop
 

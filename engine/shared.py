@@ -154,6 +154,17 @@ async def release_lock(name: str, token: str) -> None:
     await client.eval(RELEASE, 1, f"{PREFIX}lock:{name}", token)
 
 
+EXTEND = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('PEXPIRE', KEYS[1], ARGV[2]) end
+return 0
+"""
+
+
+async def extend_lock(name: str, token: str, ttl_s: float) -> bool:
+    """Push a lock's expiry ttl_s into the future, if we still hold it (False if not)."""
+    return bool(await async_client().eval(EXTEND, 1, f"{PREFIX}lock:{name}", token, int(ttl_s * 1000)))
+
+
 async def is_locked(name: str) -> bool:
     return bool(await async_client().exists(f"{PREFIX}lock:{name}"))
 

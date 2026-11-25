@@ -11,15 +11,29 @@ machine. Now they live in the same Postgres as users and conversations
 there is one database to back up. Each bot's chunks are rows tagged with its
 collection name; every search filters on it.
 
+Since Lampus Phase 1, Step 9 searches can go to a read replica (DATABASE_READ_URL):
+a second Postgres that receives every change from the primary a few milliseconds
+later and serves reads, so the primary is left for writes and for reads that
+must see their own writes. Searches can wait those milliseconds; a student's
+documents don't change between two messages. If the replica can't be reached,
+searches go to the primary for the next 30 s and then try it again. Writes,
+and the reads ingestion uses to compare (get, embeddings_of, count), always use
+the primary.
+
     store = get_vectorstore("bot_customer_handbook")
     store.reset_collection()
     store.add_documents(chunks, ids=[...])
     store.similarity_search("When does the cafe open?", k=4, filter={"section": "body"})
 """
 
+import logging
+import os
 import threading
+import time
 import uuid
 from pathlib import Path
+
+import psycopg
 
 from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 from langchain_core.documents import Document
@@ -38,8 +52,17 @@ SCHEMA_FILE = Path(__file__).parent / "store" / "vectors.sql"
 # It turns a piece of text into a 384-dimensional vector.
 EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 
+# Empty: searches use the primary too. Leave it unset for build workers: they search
+# chunks they have just written, which the replica may not have yet.
+DATABASE_READ_URL = os.getenv("DATABASE_READ_URL", "")
+REPLICA_WAIT_S = 2      # how long a search waits for a replica connection before using the primary
+REPLICA_RETRY_S = 30    # after a failure, how long to use the primary before trying the replica again
+
+log = logging.getLogger("vectorstore")
 _lock = threading.Lock()
 _pools: dict[str, ConnectionPool] = {}
+_read_pools: dict[str, ConnectionPool] = {}
+_replica_down_until = 0.0
 _embeddings: FastEmbedEmbeddings | None = None
 
 
@@ -66,6 +89,17 @@ def get_pool(url: str = DATABASE_URL) -> ConnectionPool:
     return _pools[url]
 
 
+def get_read_pool(url: str) -> ConnectionPool:
+    """A pool on the read replica. No schema set-up: a replica refuses writes, and
+    it receives the tables from the primary."""
+    with _lock:
+        if url not in _read_pools:
+            _read_pools[url] = ConnectionPool(url, min_size=1, max_size=POOL_MAX, open=True,
+                                              kwargs={"row_factory": dict_row, "autocommit": True,
+                                                      "prepare_threshold": None})
+    return _read_pools[url]
+
+
 def to_vector(values) -> str:
     """pgvector's text format: '[0.1,0.2,...]'."""
     return "[" + ",".join(str(float(v)) for v in values) + "]"
@@ -74,9 +108,11 @@ def to_vector(values) -> str:
 class VectorStore:
     """One bot's collection of chunks."""
 
-    def __init__(self, collection: str, url: str = DATABASE_URL):
+    def __init__(self, collection: str, url: str = DATABASE_URL, read_url: str | None = None):
         self.collection = collection
         self.pool = get_pool(url)
+        read_url = DATABASE_READ_URL if read_url is None else read_url
+        self.read_pool = get_read_pool(read_url) if read_url else None
 
     @property
     def embeddings(self) -> FastEmbedEmbeddings:
@@ -112,12 +148,23 @@ class VectorStore:
         # <=> is cosine distance. The WHERE keeps the search inside this bot; its
         # chunks are found by the primary key and compared one by one, which is exact
         # (why there is no HNSW index: engine/store/vectors.sql).
-        with self.pool.connection() as conn:
-            rows = conn.execute(
-                "SELECT id, content, metadata FROM chunks WHERE collection = %s AND metadata @> %s "
-                "ORDER BY embedding <=> %s::vector LIMIT %s",
-                (self.collection, Jsonb(filter or {}), to_vector(vector), k)).fetchall()
+        rows = self._search("SELECT id, content, metadata FROM chunks WHERE collection = %s AND metadata @> %s "
+                            "ORDER BY embedding <=> %s::vector LIMIT %s",
+                            (self.collection, Jsonb(filter or {}), to_vector(vector), k))
         return [Document(page_content=r["content"], metadata=r["metadata"], id=r["id"]) for r in rows]
+
+    def _search(self, sql: str, params: tuple) -> list[dict]:
+        """Run a search on the replica if there is one and it answers, else on the primary."""
+        global _replica_down_until
+        if self.read_pool is not None and time.monotonic() >= _replica_down_until:
+            try:
+                with self.read_pool.connection(timeout=REPLICA_WAIT_S) as conn:
+                    return conn.execute(sql, params).fetchall()
+            except psycopg.OperationalError as e:  # includes the pool's timeout
+                _replica_down_until = time.monotonic() + REPLICA_RETRY_S
+                log.warning("read replica unavailable, searching the primary for %d s: %s", REPLICA_RETRY_S, e)
+        with self.pool.connection() as conn:
+            return conn.execute(sql, params).fetchall()
 
     def get(self, where: dict | None = None) -> list[Document]:
         """Every chunk of this collection (optionally matching a metadata filter), in id order."""

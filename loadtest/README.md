@@ -187,3 +187,38 @@ python loadtest/bench_builds.py --kill worker    # kills the worker running the 
 | The worker running it killed 2 s in, a second worker idle | (no worker) | finished 17 s later, on attempt 2 |
 
 With the fake model the builder's drafts never pass its checks, so finished builds end as `failed` after three drafts. What counts is that the build ran to its end. In the worker test the second worker took the job over 10 s after the first stopped touching it (60 s by default), and started the build again.
+
+### Step 9: three copies behind nginx, a read replica, a copy killed
+
+GitHub Codespace (2 cores, Linux), 2026-11-25. See [ADR 0031](../docs/adr/0031-scale-out-nginx-and-read-replica.md).
+
+`SCALE=1` also starts nginx on port 8000 in front of the copies and a fresh read replica on port 5433, and gives the copies `DATABASE_READ_URL`:
+
+```bash
+SCALE=1 WORKERS=0 bash loadtest/start_copies.sh 3
+python loadtest/run.py run --url http://127.0.0.1:8000 --users 50 --turns 3
+python loadtest/bench_replica.py --watch 45      # during a run: where the searches went, and the replica's lag
+python loadtest/bench_failover.py                # 20 students; copy 1 killed after 15 s
+bash loadtest/start_copies.sh stop
+```
+
+50 students × 3 messages, the search cache cleared before each run:
+
+| Setup | Completed | Turns/s | Median turn | p95 turn |
+| --- | --- | --- | --- | --- |
+| 1 copy, before the fix | 0 of 100 started; hung | 0 | - | - |
+| 1 copy | 150 | 2.32 | 15.4 s | 24.5 s |
+| 1 copy, 32 tool threads | 102 (136 on a rerun) | 1.26 (1.74) | 5.0 s | 6.4 s |
+| 3 copies behind nginx, read replica | 150 | 2.38 | 7.4 s | 38.9 s |
+
+The first run hung one copy for good: the search graph, run in the agents' 6 tool threads, saved its steps through the event loop, and every thread ended up blocked. It no longer saves them. After the fix, three copies halve the median turn (18 tool threads instead of 6) but don't raise throughput: with the search cache off, one copy alone keeps both cores busy, so copies on one machine only share the same CPU. 32 threads in one copy moved the queue to the database pool (`PoolTimeout`).
+
+A copy killed after 15 s, 20 students chatting without pause, 45 s watched:
+
+| Setup | Replies cut off | Students answered again | Longest wait for an answer |
+| --- | --- | --- | --- |
+| 1 copy | 20 | 0 of 20 | never |
+| 3 copies, 3-minute locks (Step 7) | 7 | 13 of 20 | 7 locked out to the end |
+| 3 copies, 15 s renewed locks | 6 | 20 of 20 | 19.4 s |
+
+Searches with the cache off: 25 of 25 chunk reads on the primary without a replica; 3 of 33 with one (each copy loading its keyword index). The replica was 1.9 ms behind the primary at the median (27 ms p95), and 14 ms (161 ms p95) with the CPU saturated.

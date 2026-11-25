@@ -16,6 +16,7 @@ Step 10: the tool is made per bot (make_search_tool), bound to that bot's
 collection and subject, so a bot can only ever search its own documents.
 """
 
+import os
 import re
 import threading
 from pathlib import Path
@@ -42,7 +43,9 @@ VERBOSE = True  # print each attempt; the eval runner turns this off
 # Step 10: the key starts with the collection, so bots never share entries.
 # Lampus Phase 1, Step 7: the cache lives in Redis (engine/shared.py), so every API
 # copy shares it, and re-ingesting a bot's documents invalidates its entries.
-CACHE_ENABLED = True  # the eval runner turns this off, so cases stay independent
+# The eval runner turns this off, so cases stay independent; SEARCH_CACHE=0 turns it off
+# for a load test that must reach the database on every search (Phase 1, Step 9).
+CACHE_ENABLED = os.getenv("SEARCH_CACHE", "1") == "1"
 _stats_lock = threading.Lock()
 cache_stats = {"hits": 0, "misses": 0}  # this process's own hits and misses
 
@@ -126,7 +129,13 @@ def build_search_graph(llm, collection: str = CLEAN_COLLECTION, subject: str = S
     builder.add_edge(START, "retrieve")
     builder.add_edge("retrieve", "grade")
     builder.add_conditional_edges("grade", decide, ["retrieve", END])
-    return builder.compile()
+    # Never checkpoint this graph. Without this it inherited the conversation's Postgres
+    # checkpointer when an agent called it as a tool: from the tool's thread, each step's
+    # save was handed to the API's event loop and the thread blocked until it was done.
+    # With 50 students on one copy (Lampus Phase 1, Step 9) every tool thread ended up
+    # blocked that way and the copy hung for good. A search is never paused or resumed,
+    # so its steps don't need saving.
+    return builder.compile(checkpointer=False)
 
 
 _graphs: dict[str, object] = {}

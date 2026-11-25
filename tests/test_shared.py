@@ -94,6 +94,23 @@ class LockTest(unittest.TestCase):
             return await asyncio.gather(*(shared.acquire_lock(name, 30) for _ in range(20)))
         self.assertEqual(sum(t is not None for t in run(go())), 1)
 
+    def test_renewed_lock_outlives_its_ttl_and_only_the_holder_renews(self):
+        name = f"thread:test:{secrets.token_hex(4)}"
+
+        async def go():
+            token = await shared.acquire_lock(name, 0.3)
+            stranger = await shared.extend_lock(name, "not-the-token", 30)
+            for _ in range(3):  # a turn that runs 0.6 s on a 0.3 s lock, renewing it
+                await asyncio.sleep(0.2)
+                await shared.extend_lock(name, token, 0.3)
+            held = await shared.is_locked(name)
+            await asyncio.sleep(0.4)  # the holder "crashes": no more renewals
+            return stranger, held, await shared.is_locked(name)
+        stranger, held, after_crash = run(go())
+        self.assertFalse(stranger)
+        self.assertTrue(held)
+        self.assertFalse(after_crash)
+
     def test_lock_expires(self):
         name = f"thread:test:{secrets.token_hex(4)}"
 

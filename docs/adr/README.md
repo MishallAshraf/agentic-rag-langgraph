@@ -27,6 +27,7 @@ An ADR records one significant decision: the context, what was decided, the alte
 | [0021](0021-improvement-loop-red-team-research-fix-verify.md) | Improvement loop: red team, research, engineer, architect; fixes limited to checked learned rules a person approves | Accepted |
 | [0022](0022-error-analysis-per-bot-eval-sets.md) | Error analysis: each bot's eval set, failure modes and judges come from its own conversations, labelled by a domain expert | Accepted |
 | [0023](0023-run-on-linux-codespaces-and-ci.md) | Run on Linux: Windows-only packages behind platform markers, a Codespaces dev container, tests in CI on every push | Accepted |
+| [0024](0024-engine-and-lampus-folders.md) | Two folders: `engine/` (the bot builder, a Python package) and `lampus/` (the tutoring product); unused early steps archived | Accepted |
 
 Statuses: **Proposed** (under discussion), **Accepted**, **Superseded by NNNN** (replaced by a later decision; the old record is kept, not edited).
 

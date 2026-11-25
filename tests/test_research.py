@@ -17,8 +17,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from langchain_core.messages import AIMessage, HumanMessage  # noqa: E402
 
-import step14_research as s14  # noqa: E402
-from step14_research import Finding, Plan, Review, Task  # noqa: E402
+from engine import step14_research as s14  # noqa: E402
+from engine.step14_research import Finding, Plan, Review, Task  # noqa: E402
 
 
 class ScriptedLLM:

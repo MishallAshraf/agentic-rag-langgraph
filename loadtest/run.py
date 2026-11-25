@@ -43,7 +43,7 @@ QUESTIONS = ["What vegan options do you have?", "Can I get a refund for a cold c
 
 async def setup(users: int):
     sys.path.insert(0, str(ROOT))
-    from auth import AuthStore  # reads AUTH_DB from the environment
+    from engine.auth import AuthStore  # reads AUTH_DB from the environment
 
     store = await AuthStore().open()
     made = 0

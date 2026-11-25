@@ -20,8 +20,8 @@ import tests._env  # noqa: E402, F401
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-import api  # noqa: E402
-from auth import AuthStore, today  # noqa: E402
+from engine import api  # noqa: E402
+from engine.auth import AuthStore, today  # noqa: E402
 
 PASSWORDS = {name: secrets.token_urlsafe(16) for name in ("alice", "bob", "root")}
 
@@ -184,7 +184,7 @@ class AuthTests(unittest.TestCase):
         self.assertTrue(r.json()["chain"]["intact"])
 
     def test_notes_folders_are_per_user(self):
-        from tool_registry import notes_dir
+        from engine.tool_registry import notes_dir
         bot = api.app.state.platform.bots["study_assistant"].config
         self.assertNotEqual(notes_dir(bot, "alice"), notes_dir(bot, "bob"))
         self.assertEqual(notes_dir(bot, "alice").parent, notes_dir(bot))

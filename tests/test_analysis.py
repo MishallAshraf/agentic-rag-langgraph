@@ -18,12 +18,12 @@ import tests._env  # noqa: E402, F401  (before api.py reads its settings)
 from fastapi.testclient import TestClient  # noqa: E402
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage  # noqa: E402
 
-import analysis  # noqa: E402
-import api  # noqa: E402
-from analysis import (Assignment, Mode, TaxonomyDraft, Workspace, assign_splits, clean_taxonomy,  # noqa: E402
+from engine import analysis  # noqa: E402
+from engine import api  # noqa: E402
+from engine.analysis import (Assignment, Mode, TaxonomyDraft, Workspace, assign_splits, clean_taxonomy,  # noqa: E402
                       corrected_rate, rates, sample_profiles, trace_steps)
-from auth import AuthStore  # noqa: E402
-from bot_config import ROOT  # noqa: E402
+from engine.auth import AuthStore  # noqa: E402
+from engine.bot_config import ROOT  # noqa: E402
 
 WORK = ROOT / "data" / "test_analysis"
 DIMS = {"persona": ["regular", "tourist", "parent"], "intent": ["menu", "allergens", "booking", "refund"],

@@ -19,7 +19,7 @@ $env:AUTH_DB="data/loadtest/auth.sqlite"; $env:CHECKPOINT_DB="data/loadtest/chec
 $env:LLM_BASE_URL="http://127.0.0.1:8900/v1"; $env:API_RATE_LIMIT="1000"
 $env:QUOTA_TURNS_PER_DAY="100000"; $env:QUOTA_TOKENS_PER_DAY="100000000"
 .\.venv\Scripts\python.exe loadtest\run.py setup --users 50
-.\.venv\Scripts\python.exe api.py
+.\.venv\Scripts\python.exe -m engine.api
 ```
 
 ```powershell

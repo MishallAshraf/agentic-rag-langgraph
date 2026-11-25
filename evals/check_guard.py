@@ -18,8 +18,8 @@ from common import EVALS_DIR, cost_usd  # also loads .env and puts the project o
 import yaml  # noqa: E402
 from langchain_core.callbacks import UsageMetadataCallbackHandler  # noqa: E402
 
-from guardrails import make_input_check  # noqa: E402
-from llm import get_llm  # noqa: E402
+from engine.guardrails import make_input_check  # noqa: E402
+from engine.llm import get_llm  # noqa: E402
 
 CASES = EVALS_DIR / "guard_cases.yaml"
 CATEGORIES = ("ok", "injection", "crisis")

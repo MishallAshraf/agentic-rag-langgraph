@@ -25,6 +25,7 @@ Without keys it runs the same way and only writes evals/results/.
 import argparse
 import asyncio
 import json
+import importlib
 import os
 import re
 import time
@@ -304,13 +305,13 @@ def main():
     if args.model:
         os.environ["OPENROUTER_MODEL"] = args.model  # read by llm.get_llm()
 
-    import retrieval as retrieval_module
-    import search_graph
-    from bot_config import load_bot
+    from engine import retrieval as retrieval_module
+    from engine import search_graph
+    from engine.bot_config import load_bot
     from judge import make_judge
-    from llm import get_llm
-    build_graph = __import__(f"{args.agent}_agent").build_graph
-    from tool_registry import load_tools
+    from engine.llm import get_llm
+    build_graph = importlib.import_module(f"engine.{args.agent}_agent").build_graph
+    from engine.tool_registry import load_tools
 
     retrieval_module.DEFAULT_MODE = args.retrieval_mode
     search_graph.VERBOSE = False

@@ -19,6 +19,7 @@ New compared with Step 4:
 
 import argparse
 import asyncio
+import os
 import uuid
 from pathlib import Path
 from typing import Annotated, NotRequired, TypedDict
@@ -43,7 +44,7 @@ from step4_agent import ask_human, print_update
 from tool_registry import load_tools
 
 DEFAULT_BOT = "bots/study_assistant.yaml"
-CHECKPOINT_DB = Path(__file__).parent / "data" / "checkpoints.sqlite"
+CHECKPOINT_DB = Path(os.getenv("CHECKPOINT_DB", str(Path(__file__).parent / "data" / "checkpoints.sqlite")))
 RECURSION_LIMIT = 12
 
 # Compaction policy. Deliberately small so you can watch it happen.

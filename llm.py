@@ -9,6 +9,8 @@ Settings come from the .env file (see .env.example):
     OPENROUTER_API_KEY   required
     OPENROUTER_MODEL     optional, defaults to DEFAULT_MODEL
     OPENROUTER_FALLBACK_MODELS  optional, comma-separated; "none" turns fallback off
+    LLM_BASE_URL         optional, another OpenAI-compatible server instead of OpenRouter
+                         (the load tests point it at loadtest/mock_llm.py, a fake model)
 """
 
 import os
@@ -49,7 +51,7 @@ def get_llm(temperature: float = 0, model: str | None = None) -> ChatOpenAI:
         model=model,
         # OpenRouter's "models" list: the first is tried first, the rest on failure.
         extra_body={"models": [model, *fallbacks]} if fallbacks else None,
-        base_url=OPENROUTER_BASE_URL,
+        base_url=os.getenv("LLM_BASE_URL", OPENROUTER_BASE_URL),
         api_key=api_key,
         temperature=temperature,
         # Without a timeout, a request the provider never answers blocks forever

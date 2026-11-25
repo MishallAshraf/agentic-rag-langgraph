@@ -2,12 +2,16 @@
   // GitHub Codespaces (or VS Code Dev Containers): a Linux machine with everything installed.
   // Open the repository on GitHub -> Code -> Codespaces -> Create codespace on this branch.
   "name": "Lampus engine",
-  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  // Base image in Dockerfile: Python 3.11 on Debian bookworm. On the newer trixie base,
+  // the Docker-in-Docker feature fails to install (its moby packages are not built for trixie).
+  "build": { "dockerfile": "Dockerfile" },
   "features": {
     // Node for the React frontend (Step 12)
     "ghcr.io/devcontainers/features/node:1": { "version": "lts" },
     // Docker inside the Codespace, for Postgres, Redis and the API copies from Phase 1 Step 3 on
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    // An SSH server, so the Codespace can be reached from a terminal (gh codespace ssh / cp)
+    "ghcr.io/devcontainers/features/sshd:1": {}
   },
   "hostRequirements": { "cpus": 2, "memory": "8gb" },
   // Runs once when the Codespace is created. The secret OPENROUTER_API_KEY comes from

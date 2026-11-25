@@ -115,5 +115,44 @@ class CacheTest(unittest.TestCase):
         self.assertEqual(shared.cache_get(b, "what is x"), "answer B")
 
 
+class QueueTest(unittest.TestCase):
+    def test_each_job_to_one_worker_and_taken_over_if_its_worker_dies(self):
+        queue = f"test_{secrets.token_hex(3)}"
+        old = shared.CLAIM_IDLE_MS
+        shared.CLAIM_IDLE_MS = 300  # take over jobs idle for 0.3 s (60 s in the app)
+
+        async def go():
+            await shared.enqueue(queue, {"build": "b1"})
+            first = await shared.next_job(queue, "worker-a", block_ms=500)
+            nothing = await shared.next_job(queue, "worker-b", block_ms=100)  # a's job is not given to b
+            await asyncio.sleep(0.4)  # worker a "dies": it never acknowledges
+            again = await shared.next_job(queue, "worker-b", block_ms=100)
+            await shared.ack_job(queue, again[0])
+            await asyncio.sleep(0.4)
+            after_ack = await shared.next_job(queue, "worker-c", block_ms=100)
+            return first, nothing, again, after_ack
+        try:
+            first, nothing, again, after_ack = run(go())
+        finally:
+            shared.CLAIM_IDLE_MS = old
+        self.assertEqual(first[1], {"build": "b1"})
+        self.assertIsNone(nothing)
+        self.assertEqual(again[0], first[0])  # the same job, now worker b's
+        self.assertIsNone(after_ack)          # acknowledged: never handed out again
+
+    def test_pubsub_reaches_every_subscriber(self):
+        name = f"test:{secrets.token_hex(3)}"
+
+        async def go():
+            listeners = [await shared.subscribe(name) for _ in range(2)]
+            await shared.publish(name, {"saved": "new_bot"})
+            got = []
+            for listener in listeners:
+                got.append(await listener.get_message(timeout=2))
+                await listener.aclose()
+            return got
+        self.assertEqual([m["data"] for m in run(go())], ['{"saved": "new_bot"}'] * 2)
+
+
 if __name__ == "__main__":
     unittest.main()

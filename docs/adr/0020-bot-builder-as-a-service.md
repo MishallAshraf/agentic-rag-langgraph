@@ -1,6 +1,6 @@
 # 0020. The bot builder as a service: uploads, a background job with resumable progress, review in the browser, bots served without a restart
 
-- Status: Accepted
+- Status: Accepted; where the job runs and is stored is superseded by [ADR 0030](0030-build-queue-and-worker.md) (Lampus Phase 1, Step 8)
 - Date: 2026-11-24
 - Step: 15
 

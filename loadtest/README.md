@@ -165,3 +165,25 @@ The script also ingests the café bot into the `loadtest` schema: since Step 5 t
 | Two messages to one conversation at the same moment, one per copy | both ran | 1 ran, 1 refused (409) |
 
 Starting two copies at once on a fresh database first hung both forever. LangGraph's table setup builds an index with `CREATE INDEX CONCURRENTLY`, which waits for every open transaction to finish, including the other copy's blocking wait for the setup lock. `engine/db.py` now polls for that lock instead.
+
+### Step 8: bot builds through a queue to a worker
+
+GitHub Codespace (2 cores, Linux), 2026-11-25. See [ADR 0030](../docs/adr/0030-build-queue-and-worker.md).
+
+`start_copies.sh` now also starts the build workers (`WORKERS=1` by default) and turns off the worker inside the API copies. `bench_builds.py` signs in an admin on both copies, starts a build of the café bot on copy A, checks that copy B can see it, kills a process two seconds in, and watches the build from copy B:
+
+```bash
+bash loadtest/start_copies.sh 2
+python loadtest/bench_builds.py                  # kills API copy A
+bash loadtest/start_copies.sh stop
+QUEUE_CLAIM_IDLE_MS=10000 WORKERS=2 bash loadtest/start_copies.sh 2
+python loadtest/bench_builds.py --kill worker    # kills the worker running the build
+```
+
+| Check | Before: build in the API's memory | After: queue + worker |
+| --- | --- | --- |
+| Copy B sees a build started on copy A | no (404) | yes |
+| Copy A killed 2 s in | build lost (404 on B after 120 s) | finished 11 s later |
+| The worker running it killed 2 s in, a second worker idle | (no worker) | finished 17 s later, on attempt 2 |
+
+With the fake model the builder's drafts never pass its checks, so finished builds end as `failed` after three drafts. What counts is that the build ran to its end. In the worker test the second worker took the job over 10 s after the first stopped touching it (60 s by default), and started the build again.

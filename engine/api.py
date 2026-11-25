@@ -63,7 +63,6 @@ from starlette.datastructures import UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.callbacks import UsageMetadataCallbackHandler
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 from sse_starlette import EventSourceResponse, ServerSentEvent
@@ -74,7 +73,8 @@ from engine import step14_research
 from engine.auth import SESSION_TTL_S, AuthStore, User
 from engine import shared
 from engine.db import postgres_checkpointer
-from engine.builds import MAX_FILE_BYTES, MAX_FILES, MAX_TOTAL_BYTES, Build, BuildManager, UploadProblem
+from engine.builds import (MAX_FILE_BYTES, MAX_FILES, MAX_TOTAL_BYTES, BuildManager, BuildStore, UploadProblem,
+                           detail)
 from engine.bot_config import BotConfig, Theme, load_bot
 from engine.step7_agent import SOURCE_TOOLS, current_turn
 from engine.tool_registry import load_tools, uses_user_data
@@ -86,6 +86,9 @@ BOTS_DIR = Path(__file__).resolve().parent.parent / "bots"
 TURN_TIMEOUT_S = float(os.getenv("API_TURN_TIMEOUT", "120"))  # latency budget for one turn
 RATE_LIMIT = int(os.getenv("API_RATE_LIMIT", "10"))            # turns per student per minute (and burst)
 BOT_RATE_LIMIT = int(os.getenv("API_BOT_RATE_LIMIT", "300"))    # turns per bot (a school's tutor) per minute
+# Run queued bot builds inside this process too (Step 8). On by default so one command
+# works on a laptop; off when separate workers run (python -m engine.worker).
+RUN_WORKER = os.getenv("API_RUN_WORKER", "1") == "1"
 LOGIN_LIMIT = 5                                                # sign-in attempts per address and name per minute
 MAX_MESSAGE_CHARS = 4000
 CORS_ORIGINS = os.getenv("API_CORS_ORIGINS", "http://localhost:5173").split(",")  # Vite dev server
@@ -153,28 +156,64 @@ async def lifespan(app: FastAPI):
             # Shared by every API copy through Redis (Lampus Phase 1, Step 7).
             app.state.limiter = shared.RateLimiter()
             app.state.login_limiter = shared.FailureCounter(LOGIN_LIMIT, 60)
-            app.state.builds = make_build_manager(app.state.platform)
+            app.state.builds = await make_build_manager(app.state.platform, app.state.auth.pool)
+            # Background tasks: serve bots other copies saved, and (unless a separate
+            # worker process does it) run queued builds in this process.
+            stop = asyncio.Event()
+            tasks = [asyncio.create_task(serve_new_bots(app.state.platform, stop))]
+            if RUN_WORKER:
+                from engine.worker import work, worker_name
+                manager = app.state.builds
+                tasks.append(asyncio.create_task(work(manager.store, lambda: manager.make_graph(),
+                                                      worker_name() + ":api", stop)))
             try:
                 yield
             finally:
-                await app.state.builds.close()
+                stop.set()
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
     finally:
         await app.state.auth.close()
 
 
-def make_build_manager(platform: Platform) -> BuildManager:
+async def make_build_manager(platform: Platform, pool) -> BuildManager:
     from engine.llm import get_llm
     from engine.step10_builder import BUILDER_MODEL, build_builder
 
     def bot_exists(bot_id: str) -> bool:
         return bot_id in platform.bots
 
-    removed = BuildManager.clean_orphans(bot_exists)
+    # The builder pauses for review in the shared Postgres checkpointer, so this copy
+    # can resume a graph a worker started (Lampus Phase 1, Step 8).
+    manager = BuildManager(BuildStore(pool),
+                           lambda: build_builder(get_llm(model=BUILDER_MODEL), platform.checkpointer),
+                           bot_exists, platform.add_bot)
+    removed = await manager.clean_orphans()
     if removed:
-        log.info("deleted uploads of unfinished builds: %s", ", ".join(removed))
-    # A fresh graph per build; its in-memory checkpoint only has to last until the review.
-    return BuildManager(lambda: build_builder(get_llm(model=BUILDER_MODEL), InMemorySaver()),
-                        bot_exists, platform.add_bot)
+        log.info("deleted uploads of builds that will never finish: %s", ", ".join(removed))
+    return manager
+
+
+async def serve_new_bots(platform: Platform, stop: asyncio.Event) -> None:
+    """When any copy saves a new bot, every copy starts serving it (Redis pub/sub)."""
+    while not stop.is_set():
+        listener = None
+        try:
+            listener = await shared.subscribe("bots")
+            while not stop.is_set():
+                message = await listener.get_message(timeout=1)
+                if message:
+                    bot_id = json.loads(message["data"]).get("saved")
+                    if bot_id and bot_id not in platform.bots:
+                        platform.add_bot(bot_id)
+                        log.info("now serving %s, saved by another copy", bot_id)
+        except Exception as e:  # noqa: BLE001 - Redis away: try again shortly
+            log.warning("bot announcements unavailable: %s", e)
+            await asyncio.sleep(2)
+        finally:
+            if listener is not None:
+                await listener.aclose()
 
 
 app = FastAPI(title="Agentic RAG bots", version="0.15.0", lifespan=lifespan)
@@ -606,16 +645,11 @@ async def audit_log(request: Request, limit: int = 50, user: User = Depends(admi
 
 # ------------------------------------------------------------------ routes: building bots (Step 15)
 
-def build_for(request: Request, build_id: str) -> Build:
-    build = request.app.state.builds.builds.get(build_id)
-    if build is None:
+async def build_for(request: Request, build_id: str) -> dict:
+    row = await request.app.state.builds.store.get(build_id)
+    if row is None:
         raise HTTPException(404, "No such build")
-    return build
-
-
-def build_detail(build: Build) -> dict:
-    return {**build.summary(), "events": build.events, "proposal": build.proposal,
-            "problems": build.problems, "saved": build.saved}
+    return row
 
 
 @app.post("/admin/builds", status_code=201)
@@ -625,62 +659,62 @@ async def start_build(request: Request, user: User = Depends(admin_user)):
     builds: BuildManager = request.app.state.builds
     if int(request.headers.get("content-length") or 0) > MAX_TOTAL_BYTES + 2**20:
         raise HTTPException(413, f"The upload is larger than {MAX_TOTAL_BYTES // 2**20} MB.")
-    if builds.busy():
-        raise HTTPException(409, "Another bot is being built. Try again when it has finished.")
     async with request.form(max_files=MAX_FILES + 1, max_fields=10) as form:
         bot_id, use_case = str(form.get("bot_id") or "").strip(), str(form.get("use_case") or "")
         uploads = [f for f in form.getlist("files") if isinstance(f, UploadFile)]
         try:
-            builds.check_request(bot_id, use_case)
+            await builds.check_request(bot_id, use_case)
             # Read at most one byte over the limit: enough to know a file is too large.
             files = [(f.filename or "file", await f.read(MAX_FILE_BYTES + 1)) for f in uploads]
             folder, names = builds.store_files(bot_id, files)
         except UploadProblem as e:
             raise HTTPException(400, str(e)) from None
+    # Queued for a worker (Step 8): several builds may wait; each worker runs one at a time.
     build = await builds.start(bot_id, use_case, folder, names, by=user.username)
     await request.app.state.auth.audit(user.username, "build.start", bot_id=bot_id, ip=client_ip(request),
-                                       detail={"build": build.id, "files": len(names),
+                                       detail={"build": build["id"], "files": len(names),
                                                "bytes": sum(len(d) for _, d in files)})
-    return build.summary()
+    return build
 
 
 @app.get("/admin/builds")
 async def list_builds(request: Request, user: User = Depends(admin_user)):
-    return sorted((b.summary() for b in request.app.state.builds.builds.values()),
-                  key=lambda b: b["started"], reverse=True)
+    from engine.builds import _summary
+    return [_summary(row) for row in await request.app.state.builds.store.recent()]
 
 
 @app.get("/admin/builds/{build_id}")
 async def get_build(request: Request, build_id: str, user: User = Depends(admin_user)):
-    return build_detail(build_for(request, build_id))
+    return await detail(request.app.state.builds.store, await build_for(request, build_id))
 
 
 @app.get("/admin/builds/{build_id}/events")
 async def build_events(request: Request, build_id: str, after: int = 0, user: User = Depends(admin_user)):
-    build = build_for(request, build_id)
+    await build_for(request, build_id)
     # EventSource reconnects by itself and sends the last id it saw: continue from there.
     last = request.headers.get("last-event-id")
     after = int(last) if last and last.isdigit() else max(after, 0)
+    builds: BuildManager = request.app.state.builds
 
     async def events():
-        async for e in request.app.state.builds.follow(build, after):
+        async for e in builds.follow(build_id, after):
             yield ServerSentEvent(id=str(e["n"]), event="build", data=json.dumps(e, ensure_ascii=False))
-        yield ServerSentEvent(event="end", data=json.dumps({"status": build.status}))
+        yield ServerSentEvent(event="end", data=json.dumps({"status": (await builds.store.get(build_id))["status"]}))
 
     return EventSourceResponse(events(), ping=15)
 
 
 @app.post("/admin/builds/{build_id}/decision")
 async def decide_build(request: Request, build_id: str, body: DecisionIn, user: User = Depends(admin_user)):
-    build = build_for(request, build_id)
+    row = await build_for(request, build_id)
     try:
-        await request.app.state.builds.decide(build, body.decision)
+        row = await request.app.state.builds.decide(build_id, body.decision)
     except UploadProblem as e:
         raise HTTPException(409, str(e)) from None
-    await request.app.state.auth.audit(user.username, "build.decision", bot_id=build.bot_id, ip=client_ip(request),
-                                       detail={"build": build.id, "decision": body.decision,
-                                               "result": build.status})
-    return build_detail(build)
+    await request.app.state.auth.audit(user.username, "build.decision", bot_id=row["bot_id"], ip=client_ip(request),
+                                       detail={"build": build_id, "decision": body.decision,
+                                               "result": row["status"]})
+    return await detail(request.app.state.builds.store, row)
 
 
 # ------------------------------------------------------------------ routes: error analysis (Step 17)

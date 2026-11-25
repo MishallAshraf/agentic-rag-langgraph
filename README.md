@@ -42,7 +42,7 @@ Step 16 is done: an improvement loop. A red-team agent attacks a bot with realis
 
 Step 17 is in progress: error analysis. Instead of generic test sets, a bot's evaluation set is built from its own conversations: synthetic messages spread over how its users differ, labelled by a domain expert on a review page, grouped into the bot's own failure modes, with one judge per mode checked against the expert's labels. The café bot's 50 conversations are ready for labelling.
 
-Lampus Phase 1 is in progress: the engine is being made production-ready for [Lampus](lampus/README.md), a tutoring product built on it. Done so far: a load-test harness with a fake model ([loadtest](loadtest/README.md)), Linux support with CI, the `engine/` and `lampus/` folders ([ADR 0024](docs/adr/0024-engine-and-lampus-folders.md)), Postgres for users, quotas and the audit log, which took sign-in failures at 10 students at once from 90% to 0% ([ADR 0025](docs/adr/0025-postgres-for-users-quotas-and-audit.md)), conversations in Postgres too ([ADR 0026](docs/adr/0026-conversations-in-postgres.md)), document chunks moved from Chroma to Postgres with pgvector ([ADR 0027](docs/adr/0027-pgvector-as-vector-store.md)), and data lineage, which also makes re-indexing incremental: after one file is edited, 1 chunk is embedded instead of 225 ([ADR 0028](docs/adr/0028-data-lineage-and-incremental-ingestion.md)), and Redis for the rate limits, conversation locks and search cache, so they hold across several API copies: with two copies, a student limited to 10 messages a minute got 20 through before and 10 after ([ADR 0029](docs/adr/0029-redis-for-shared-limits-locks-and-cache.md)).
+Lampus Phase 1 is in progress: the engine is being made production-ready for [Lampus](lampus/README.md), a tutoring product built on it. Done so far: a load-test harness with a fake model ([loadtest](loadtest/README.md)), Linux support with CI, the `engine/` and `lampus/` folders ([ADR 0024](docs/adr/0024-engine-and-lampus-folders.md)), Postgres for users, quotas and the audit log, which took sign-in failures at 10 students at once from 90% to 0% ([ADR 0025](docs/adr/0025-postgres-for-users-quotas-and-audit.md)), conversations in Postgres too ([ADR 0026](docs/adr/0026-conversations-in-postgres.md)), document chunks moved from Chroma to Postgres with pgvector ([ADR 0027](docs/adr/0027-pgvector-as-vector-store.md)), and data lineage, which also makes re-indexing incremental: after one file is edited, 1 chunk is embedded instead of 225 ([ADR 0028](docs/adr/0028-data-lineage-and-incremental-ingestion.md)), and Redis for the rate limits, conversation locks and search cache, so they hold across several API copies: with two copies, a student limited to 10 messages a minute got 20 through before and 10 after ([ADR 0029](docs/adr/0029-redis-for-shared-limits-locks-and-cache.md)), and bot builds through a queue to a separate worker, so a build survives the API copy that started it and the worker running it: before, killing the copy lost the build; now it finishes, and a dead worker's build is taken over by another ([ADR 0030](docs/adr/0030-build-queue-and-worker.md)).
 
 ## Repository layout
 
@@ -74,7 +74,7 @@ python -m venv .venv
 
 The embedding model downloads automatically on the first run.
 
-Users, sessions, quotas, the audit log, conversations and document chunks (with pgvector) are stored in Postgres ([ADR 0025](docs/adr/0025-postgres-for-users-quotas-and-audit.md), [ADR 0026](docs/adr/0026-conversations-in-postgres.md), [ADR 0027](docs/adr/0027-pgvector-as-vector-store.md)). Rate limits, conversation locks and the search cache are in Redis ([ADR 0029](docs/adr/0029-redis-for-shared-limits-locks-and-cache.md)). In a Codespace both start by themselves; elsewhere, with Docker:
+Users, sessions, quotas, the audit log, conversations and document chunks (with pgvector) are stored in Postgres ([ADR 0025](docs/adr/0025-postgres-for-users-quotas-and-audit.md), [ADR 0026](docs/adr/0026-conversations-in-postgres.md), [ADR 0027](docs/adr/0027-pgvector-as-vector-store.md)). Rate limits, conversation locks, the search cache and the bot-build queue are in Redis ([ADR 0029](docs/adr/0029-redis-for-shared-limits-locks-and-cache.md), [ADR 0030](docs/adr/0030-build-queue-and-worker.md)). In a Codespace both start by themselves; elsewhere, with Docker:
 
 ```bash
 docker compose up -d db redis
@@ -296,6 +296,12 @@ Uploads are checked before they are stored (type, real file content, size, safe 
 .\.venv\Scripts\python.exe -m unittest tests.test_builds tests.test_auth tests.test_research -v
 ```
 
+Builds are queued in Redis and run by a worker. By default the API runs one inside itself, so nothing else needs starting. With several API copies, run workers as their own processes and set `API_RUN_WORKER=0` on the API ([ADR 0030](docs/adr/0030-build-queue-and-worker.md)):
+
+```bash
+python -m engine.worker
+```
+
 The builder uses `BUILDER_MODEL` (Sonnet 5.5 by default). If port 8000 is taken, run the API with `API_PORT=8001` and start Vite with the same variable. See [ADR 0020](docs/adr/0020-bot-builder-as-a-service.md).
 
 ## Step 16: the improvement loop
@@ -363,7 +369,8 @@ Generating and running 50 conversations costs about USD 0.10; building the judge
 | `step14_research.py` | Multi-agent research team: planner, parallel researchers, writer, reviewer |
 | `bots/research_assistant.yaml` | A research bot over the study assistant's and the design guide's documents |
 | `tests/test_research.py` | Tests for the team's control flow and permissions, with a scripted model |
-| `builds.py` | The builder as a background job: upload checks, progress events, review decision |
+| `builds.py` | The builder as a queued job: upload checks, builds and progress events in Postgres, review decision |
+| `worker.py` | The build worker: takes builds from the Redis queue and runs them |
 | `tests/test_builds.py` | Tests for uploads, build progress, review and publishing, with a stand-in builder |
 | `tests/_env.py` | Shared test settings (a throwaway user database) for the API test suites |
 | `improve.py` | Improvement loop: red team, judge, researcher, engineer, architect, human approval |

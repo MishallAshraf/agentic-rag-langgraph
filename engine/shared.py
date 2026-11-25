@@ -195,3 +195,80 @@ def invalidate(collection: str) -> None:
         sync_client().incr(f"{PREFIX}gen:{collection}")
     except redis.RedisError as e:
         log.error("could not invalidate the cache for %s: %s", collection, e)
+
+
+# ------------------------------------------------------------------ queue and pub/sub (topic 5)
+
+# A job queue on a Redis Stream with a consumer group. XADD appends a job; each
+# worker reads with XREADGROUP, so a job goes to exactly one worker, and stays
+# "pending" until the worker acknowledges it (XACK) when the job is done. If a
+# worker dies, its pending jobs sit idle; another worker takes them over with
+# XAUTOCLAIM after CLAIM_IDLE_MS. A long job "touches" its entry now and then so
+# it isn't taken over while still running (at-least-once delivery: a job may run
+# twice, so running it must be safe to repeat).
+GROUP = "workers"
+CLAIM_IDLE_MS = int(os.getenv("QUEUE_CLAIM_IDLE_MS", "60000"))
+
+
+def stream_key(queue: str) -> str:
+    return f"{PREFIX}queue:{queue}"
+
+
+async def enqueue(queue: str, job: dict) -> str:
+    return await async_client().xadd(stream_key(queue), job)
+
+
+async def _ensure_group(client, key: str) -> None:
+    try:
+        await client.xgroup_create(key, GROUP, id="0", mkstream=True)
+    except redis.ResponseError as e:
+        if "BUSYGROUP" not in str(e):  # the group exists already: fine
+            raise
+
+
+async def next_job(queue: str, consumer: str, block_ms: int = 5000) -> tuple[str, dict] | None:
+    """The next job for this worker: first any job a dead worker left behind, then a new one."""
+    client, key = async_client(), stream_key(queue)
+    await _ensure_group(client, key)
+    _, claimed, _ = await client.xautoclaim(key, GROUP, consumer, min_idle_time=CLAIM_IDLE_MS, count=1)
+    if claimed:
+        return claimed[0]
+    got = await client.xreadgroup(GROUP, consumer, {key: ">"}, count=1, block=block_ms)
+    return got[0][1][0] if got else None
+
+
+async def touch_job(queue: str, consumer: str, job_id: str) -> None:
+    """Reset the job's idle time: 'still working on it', so no one takes it over."""
+    await async_client().xclaim(stream_key(queue), GROUP, consumer, 0, [job_id], justid=True)
+
+
+async def ack_job(queue: str, job_id: str) -> None:
+    await async_client().xack(stream_key(queue), GROUP, job_id)
+
+
+async def publish(channel: str, message: dict) -> None:
+    """Pub/sub: deliver to every process subscribed right now; nobody listening, nobody gets it.
+    So it only says "something changed"; what changed is read from Postgres."""
+    import json
+
+    try:
+        await async_client().publish(f"{PREFIX}{channel}", json.dumps(message))
+    except redis.RedisError as e:  # listeners also re-check on a timer, so a lost message only delays them
+        log.warning("could not publish on %s: %s", channel, e)
+
+
+async def subscribe(channel: str):
+    """A listener on one channel (its own connection), ready once this returns.
+
+    It waits for Redis to confirm the subscription, so a message published right
+    after this returns is not missed. Read with get_message(timeout=...); close
+    with aclose().
+    """
+    listener = async_client().pubsub()
+    await listener.subscribe(f"{PREFIX}{channel}")
+    for _ in range(50):
+        confirm = await listener.get_message(timeout=0.1)
+        if confirm and confirm["type"] == "subscribe":
+            return listener
+    await listener.aclose()
+    raise redis.RedisError(f"no subscription confirmation for {channel}")

@@ -5,6 +5,8 @@
 A stand-in builder graph replaces Step 10's (same nodes, same review
 interrupt, no LLM and no indexing), and bots are saved to a temporary folder,
 so these tests check the upload rules, the job and the permissions for free.
+Since Lampus Phase 1, Step 8 builds go through the Redis queue to a worker; here
+the worker runs inside the API process (API_RUN_WORKER=1), so Redis is needed.
 """
 
 import asyncio
@@ -107,7 +109,12 @@ def fake_builder():
     g.add_edge("draft", "validate")
     g.add_edge("write_tests", "review")
     g.add_edge("save", END)
-    return g.compile(checkpointer=InMemorySaver())
+    # One saver for every graph made: the worker pauses the build and a fresh graph
+    # resumes it at the decision, as the shared Postgres checkpointer allows in the app.
+    return g.compile(checkpointer=CHECKPOINTER)
+
+
+CHECKPOINTER = InMemorySaver()
 
 
 async def make_users():
@@ -155,7 +162,7 @@ class BuildTests(unittest.TestCase):
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             build = self.root.get(f"/admin/builds/{build_id}").json()
-            if build["status"] != "running":
+            if build["status"] not in ("queued", "running"):
                 return build
             time.sleep(0.05)
         self.fail("the build did not finish")
@@ -248,15 +255,38 @@ class BuildTests(unittest.TestCase):
         self.assertEqual([e["n"] for e in self.events(build_id, {"Last-Event-ID": "4"})], [5, 6])
         self.root.post(f"/admin/builds/{build_id}/decision", json={"decision": "reject"})
 
-    def test_one_build_at_a_time(self):
+    def test_builds_queue_and_run_one_at_a_time(self):
         GATE.clear()  # the first build waits in "ingest"
         try:
             first = self.start("first_bot").json()["id"]
-            self.assertEqual(self.start("second_bot").status_code, 409)
+            deadline = time.monotonic() + 5
+            while self.root.get(f"/admin/builds/{first}").json()["status"] != "running":
+                self.assertLess(time.monotonic(), deadline, "the worker never took the first build")
+                time.sleep(0.05)
+            r = self.start("second_bot")  # accepted, and waits in the queue
+            self.assertEqual(r.status_code, 201)
+            second = r.json()["id"]
+            time.sleep(0.3)
+            self.assertEqual(self.root.get(f"/admin/builds/{second}").json()["status"], "queued")
+            self.assertEqual(self.start("second_bot").status_code, 400)  # one build per bot id at a time
         finally:
             GATE.set()
-        self.wait(first)
-        self.root.post(f"/admin/builds/{first}/decision", json={"decision": "reject"})
+        for build_id in (first, second):
+            self.assertEqual(self.wait(build_id)["status"], "review")
+            self.root.post(f"/admin/builds/{build_id}/decision", json={"decision": "reject"})
+
+    def test_two_admins_deciding_at_once_one_wins(self):
+        build_id = self.start("contested_bot").json()["id"]
+        self.wait(build_id)
+        from engine.builds import UploadProblem
+        manager = api.app.state.builds
+
+        async def both():
+            return await asyncio.gather(manager.decide(build_id, "reject"), manager.decide(build_id, "reject"),
+                                        return_exceptions=True)
+        results = self.client.portal.call(both)
+        self.assertEqual(sum(isinstance(r, UploadProblem) for r in results), 1)
+        self.assertEqual(self.root.get(f"/admin/builds/{build_id}").json()["status"], "rejected")
 
 
 if __name__ == "__main__":

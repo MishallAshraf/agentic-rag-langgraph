@@ -13,24 +13,27 @@ minutes. A request that long breaks on a reload or a proxy timeout, and the
 work would be lost with it. The job keeps running; any page can reconnect to
 its events, which are numbered so nothing is missed or repeated.
 
-Builds live in memory. A restart loses builds that were not yet approved
-(their uploads are deleted at the next start); saved bots are files, so they
-survive. One build runs at a time: indexing is CPU- and memory-heavy, and this
-machine has 8 GB.
+Lampus Phase 1, Step 8 (course topic 5): the work runs in a separate worker
+process (engine/worker.py), not in the API. The API stores the build in Postgres
+and puts a job on a Redis queue; a worker takes the job, runs the builder graph
+and writes each progress event to Postgres, then announces it on Redis pub/sub so
+whichever API copy a page is connected to can pass it on. A build survives the
+API copy that started it, and a worker that dies mid-build has its job taken
+over by another. Each worker runs one build at a time: indexing is CPU- and
+memory-heavy.
 """
 
-import asyncio
 import logging
 import re
 import shutil
-import time
 import uuid
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
 from langgraph.types import Command
+from psycopg.types.json import Jsonb
 
+from engine import shared
 from engine.bot_config import ID_PATTERN, ROOT
 
 log = logging.getLogger("builds")
@@ -41,7 +44,7 @@ MAX_FILES = 20
 MAX_FILE_BYTES = 20 * 1024 * 1024
 MAX_TOTAL_BYTES = 60 * 1024 * 1024
 USE_CASE_CHARS = (20, 1000)
-KEEP_FINISHED = 20  # finished builds kept for viewing
+KEEP_FINISHED = 20  # builds listed on the admin page
 SAFE_NAME = re.compile(r"[^A-Za-z0-9._ -]+")
 
 STAGES = {  # builder node -> what the user is told
@@ -86,56 +89,110 @@ def check_upload(name: str, data: bytes) -> None:
             raise UploadProblem(f"{name}: Markdown files must be UTF-8 text") from None
 
 
-@dataclass
-class Build:
-    id: str
-    bot_id: str
-    use_case: str
-    folder: str                      # relative to the project, as Knowledge expects
-    files: list[str]
-    by: str
-    status: str = "running"          # running -> review -> saved | rejected; or failed
-    events: list[dict] = field(default_factory=list)
-    proposal: dict | None = None     # config and tests, while waiting for review
-    problems: list[str] = field(default_factory=list)
-    saved: list[str] = field(default_factory=list)
-    started: float = field(default_factory=time.time)
-    changed: asyncio.Condition = field(default_factory=asyncio.Condition)
-    task: asyncio.Task | None = None
-    graph: object = None             # the builder graph, kept for the review decision
+ACTIVE = ("queued", "running", "review", "deciding")
+WORKING = ("queued", "running")  # the worker still has something to do
+MAX_ATTEMPTS = 3                 # a build whose worker keeps dying is given up on
+QUEUE = "builds"
 
-    @property
-    def finished(self) -> bool:
-        return self.status in ("saved", "rejected", "failed")
 
-    def summary(self) -> dict:
-        return {"id": self.id, "bot_id": self.bot_id, "status": self.status, "by": self.by,
-                "started": self.started, "files": self.files, "use_case": self.use_case}
+def _summary(row: dict) -> dict:
+    return {"id": row["id"], "bot_id": row["bot_id"], "status": row["status"], "by": row["by_user"],
+            "started": row["started"].timestamp(), "files": row["files"], "use_case": row["use_case"],
+            "worker": row["worker"], "attempts": row["attempts"]}
+
+
+class BuildStore:
+    """Builds and their progress events in Postgres, readable by every API copy and the worker."""
+
+    JSON_FIELDS = {"files", "proposal", "problems", "saved"}
+
+    def __init__(self, pool):
+        self.pool = pool
+
+    async def create(self, bot_id: str, use_case: str, folder: str, files: list[str], by: str) -> dict:
+        async with self.pool.connection() as conn:
+            return await (await conn.execute(
+                "INSERT INTO builds (id, bot_id, use_case, folder, files, by_user, status) "
+                "VALUES (%s, %s, %s, %s, %s, %s, 'queued') RETURNING *",
+                (uuid.uuid4().hex, bot_id, use_case, folder, Jsonb(files), by))).fetchone()
+
+    async def get(self, build_id: str) -> dict | None:
+        async with self.pool.connection() as conn:
+            return await (await conn.execute("SELECT * FROM builds WHERE id = %s", (build_id,))).fetchone()
+
+    async def recent(self, limit: int = KEEP_FINISHED) -> list[dict]:
+        async with self.pool.connection() as conn:
+            return await (await conn.execute("SELECT * FROM builds ORDER BY started DESC LIMIT %s",
+                                             (limit,))).fetchall()
+
+    async def update(self, build_id: str, only_from: tuple[str, ...] | None = None, **fields) -> dict | None:
+        """Change fields; with only_from, only if the status is one of those (None if it wasn't).
+
+        The status check and the change are one statement, so two API copies
+        deciding the same build can't both win.
+        """
+        sets = ", ".join(f"{k} = %({k})s" for k in fields)
+        params = {k: Jsonb(v) if k in self.JSON_FIELDS else v for k, v in fields.items()}
+        where = "id = %(id)s" + (" AND status = ANY(%(from)s)" if only_from else "")
+        async with self.pool.connection() as conn:
+            return await (await conn.execute(f"UPDATE builds SET {sets}, updated = now() WHERE {where} RETURNING *",
+                                             {**params, "id": build_id, "from": list(only_from or [])})).fetchone()
+
+    async def add_event(self, build_id: str, stage: str, status: str, **data) -> dict:
+        async with self.pool.connection() as conn:
+            async with conn.transaction():
+                # One writer per build at a time (the worker while it runs, then the deciding copy);
+                # the row lock makes numbering safe even if that ever changes.
+                await conn.execute("SELECT 1 FROM builds WHERE id = %s FOR UPDATE", (build_id,))
+                n = (await (await conn.execute(
+                    "SELECT coalesce(max(n), 0) + 1 AS n FROM build_events WHERE build_id = %s",
+                    (build_id,))).fetchone())["n"]
+                event = {"n": n, "stage": stage, "status": status, **data}
+                await conn.execute("INSERT INTO build_events (build_id, n, event) VALUES (%s, %s, %s)",
+                                   (build_id, n, Jsonb(event)))
+        await shared.publish(f"build:{build_id}", {"n": n})  # wakes anyone following this build
+        return event
+
+    async def events_after(self, build_id: str, after: int) -> list[dict]:
+        async with self.pool.connection() as conn:
+            rows = await (await conn.execute(
+                "SELECT event FROM build_events WHERE build_id = %s AND n > %s ORDER BY n",
+                (build_id, after))).fetchall()
+        return [r["event"] for r in rows]
+
+    async def active_bot_ids(self) -> set[str]:
+        async with self.pool.connection() as conn:
+            rows = await (await conn.execute("SELECT DISTINCT bot_id FROM builds WHERE status = ANY(%s)",
+                                             (list(ACTIVE),))).fetchall()
+        return {r["bot_id"] for r in rows}
+
+
+async def detail(store: BuildStore, row: dict) -> dict:
+    return {**_summary(row), "events": await store.events_after(row["id"], 0), "proposal": row["proposal"],
+            "problems": row["problems"], "saved": row["saved"]}
 
 
 class BuildManager:
-    """Runs builder graphs as background jobs and keeps their events for anyone who reconnects."""
+    """The API's side of builds: accept uploads, queue the job, report progress, take the review decision."""
 
-    def __init__(self, make_graph: Callable, bot_exists: Callable[[str], bool], on_saved: Callable[[str], None]):
-        self.make_graph = make_graph   # () -> a compiled builder graph with a checkpointer
+    def __init__(self, store: BuildStore, make_graph: Callable, bot_exists: Callable[[str], bool],
+                 on_saved: Callable[[str], None]):
+        self.store = store
+        self.make_graph = make_graph   # () -> the builder graph, on the shared Postgres checkpointer
         self.bot_exists = bot_exists
-        self.on_saved = on_saved       # bot_id -> serve the new bot
-        self.builds: dict[str, Build] = {}
-        self.lock = asyncio.Lock()     # one build runs at a time
+        self.on_saved = on_saved       # bot_id -> serve the new bot in this copy
 
     # ---------------------------------------------------------------- starting
 
-    def busy(self) -> Build | None:
-        return next((b for b in self.builds.values() if b.status == "running"), None)
-
-    def check_request(self, bot_id: str, use_case: str) -> None:
+    async def check_request(self, bot_id: str, use_case: str) -> None:
         if not ID_PATTERN.match(bot_id):
             raise UploadProblem("Bot id: 3-40 characters, lowercase letters, digits and underscores, "
                                 "starting with a letter.")
         if self.bot_exists(bot_id):
             raise UploadProblem(f"A bot called '{bot_id}' already exists. Choose another id.")
-        if any(b.bot_id == bot_id and b.status == "review" for b in self.builds.values()):
-            raise UploadProblem(f"A build of '{bot_id}' is waiting for review. Approve or reject it first.")
+        if bot_id in await self.store.active_bot_ids():
+            raise UploadProblem(f"A build of '{bot_id}' is queued, running or waiting for review. "
+                                "Wait for it, or reject it first.")
         if not USE_CASE_CHARS[0] <= len(use_case.strip()) <= USE_CASE_CHARS[1]:
             raise UploadProblem(f"Describe the use case in {USE_CASE_CHARS[0]} to {USE_CASE_CHARS[1]} characters.")
 
@@ -160,120 +217,123 @@ class BuildManager:
             names.append(safe)
         return folder.relative_to(ROOT).as_posix(), names
 
-    async def start(self, bot_id: str, use_case: str, folder: str, files: list[str], by: str) -> Build:
-        build = Build(id=uuid.uuid4().hex, bot_id=bot_id, use_case=use_case.strip(), folder=folder,
-                      files=files, by=by)
-        self.builds[build.id] = build
-        self._forget_old()
-        build.task = asyncio.create_task(self._run(build))
-        return build
-
-    # ---------------------------------------------------------------- running
-
-    async def _emit(self, build: Build, stage: str, **data) -> None:
-        async with build.changed:
-            build.events.append({"n": len(build.events) + 1, "stage": stage, "status": build.status, **data})
-            build.changed.notify_all()
-
-    async def _run(self, build: Build) -> None:
-        config = {"configurable": {"thread_id": build.id}}
-        try:
-            async with self.lock:
-                await self._emit(build, "started", files=len(build.files))
-                build.graph = graph = self.make_graph()
-                async for update in graph.astream({"bot_id": build.bot_id, "use_case": build.use_case,
-                                                   "folder": build.folder, "log": []}, config,
-                                                  stream_mode="updates"):
-                    for node, data in update.items():
-                        if node in STAGES:
-                            await self._emit(build, node, message=self._describe(node, data or {}))
-                state = await graph.aget_state(config)
-                if state.interrupts:
-                    build.proposal = state.interrupts[0].value
-                    build.status = "review"
-                    await self._emit(build, "review", message="Ready for review")
-                else:
-                    build.problems = state.values.get("problems") or ["The builder stopped without a proposal."]
-                    await self._fail(build)
-        except (Exception, SystemExit) as e:  # ingest raises SystemExit when no file can be read
-            log.exception("build %s failed", build.id)
-            build.problems = [f"The build failed: {type(e).__name__}: {e}"]
-            await self._fail(build)
-
-    def _describe(self, node: str, data: dict) -> str:
-        if node == "draft" and data.get("spec"):
-            return f"Drafted \"{data['spec'].get('name', '')}\""
-        if node == "validate":
-            problems = data.get("problems") or []
-            return f"Found {len(problems)} problem(s); drafting again" if problems else "The draft passed every check"
-        logs = data.get("log") or []
-        text = logs[-1] if logs else STAGES[node]
-        return text[:1].upper() + text[1:]
-
-    async def _fail(self, build: Build) -> None:
-        build.status = "failed"
-        shutil.rmtree(ROOT / build.folder, ignore_errors=True)
-        await self._emit(build, "failed", problems=build.problems)
-
-    # ---------------------------------------------------------------- deciding
-
-    async def decide(self, build: Build, decision: str) -> Build:
-        if build.status != "review":
-            raise UploadProblem("This build is not waiting for review.")
-        if decision == "approve" and self.bot_exists(build.bot_id):  # made by someone else meanwhile
-            raise UploadProblem(f"A bot called '{build.bot_id}' exists now. Reject this build.")
-        build.status = "deciding"
-        config = {"configurable": {"thread_id": build.id}}
-        try:
-            result = await build.graph.ainvoke(Command(resume=decision), config)
-        except Exception:
-            build.status = "review"  # nothing was saved: the reviewer may try again
-            raise
-        if decision == "approve" and result.get("saved"):
-            build.saved, build.status = result["saved"], "saved"
-            self.on_saved(build.bot_id)
-            await self._emit(build, "saved", message="Saved: " + ", ".join(build.saved))
-        else:
-            build.status = "rejected"
-            shutil.rmtree(ROOT / build.folder, ignore_errors=True)
-            await self._emit(build, "rejected", message="Rejected; the uploaded files were deleted")
-        build.proposal = build.proposal if build.status == "saved" else None
-        return build
+    async def start(self, bot_id: str, use_case: str, folder: str, files: list[str], by: str) -> dict:
+        row = await self.store.create(bot_id, use_case.strip(), folder, files, by)
+        await shared.enqueue(QUEUE, {"build": row["id"]})  # a worker picks it up
+        return _summary(row)
 
     # ---------------------------------------------------------------- following
 
-    async def follow(self, build: Build, after: int = 0):
-        """Every event after number `after`, then new ones as they happen, until the build stops running."""
-        sent = after
-        while True:
-            async with build.changed:
-                await build.changed.wait_for(lambda: len(build.events) > sent or build.status != "running")
-                new = build.events[sent:]
-            for e in new:
-                yield e
-            sent += len(new)
-            if build.status != "running" and sent >= len(build.events):
-                return
+    async def follow(self, build_id: str, after: int = 0):
+        """Every event after number `after`, then new ones as they happen, until the worker is done.
+
+        Subscribe first, then read: an event written between the two is still read.
+        Pub/sub only says "something new"; the events themselves come from Postgres,
+        so a page can reconnect to any copy and miss nothing.
+        """
+        sent, listener = after, await shared.subscribe(f"build:{build_id}")
+        try:
+            while True:
+                for e in await self.store.events_after(build_id, sent):
+                    yield e
+                    sent = e["n"]
+                row = await self.store.get(build_id)
+                if row["status"] not in WORKING and not await self.store.events_after(build_id, sent):
+                    return
+                # Wait for a "something new" message; re-check every 15 s in case one was lost.
+                await listener.get_message(timeout=15)
+        finally:
+            await listener.aclose()
+
+    # ---------------------------------------------------------------- deciding
+
+    async def decide(self, build_id: str, decision: str) -> dict:
+        row = await self.store.get(build_id)
+        if row is None or row["status"] != "review":
+            raise UploadProblem("This build is not waiting for review.")
+        if decision == "approve" and self.bot_exists(row["bot_id"]):  # made by someone else meanwhile
+            raise UploadProblem(f"A bot called '{row['bot_id']}' exists now. Reject this build.")
+        if await self.store.update(build_id, only_from=("review",), status="deciding") is None:
+            raise UploadProblem("This build is not waiting for review.")  # another admin got there first
+        config = {"configurable": {"thread_id": row["thread"]}}
+        try:
+            # The builder's state is in the shared checkpointer, so this copy can resume
+            # the graph the worker paused, wherever that worker ran.
+            result = await self.make_graph().ainvoke(Command(resume=decision), config)
+        except Exception:
+            await self.store.update(build_id, status="review")  # nothing was saved: try again
+            raise
+        if decision == "approve" and result.get("saved"):
+            await self.store.update(build_id, status="saved", saved=result["saved"])
+            self.on_saved(row["bot_id"])
+            await shared.publish("bots", {"saved": row["bot_id"]})  # every other copy serves it too
+            await self.store.add_event(build_id, "saved", "saved", message="Saved: " + ", ".join(result["saved"]))
+        else:
+            await self.store.update(build_id, status="rejected", proposal=None)
+            shutil.rmtree(ROOT / row["folder"], ignore_errors=True)
+            await self.store.add_event(build_id, "rejected", "rejected",
+                                       message="Rejected; the uploaded files were deleted")
+        return await self.store.get(build_id)
 
     # ---------------------------------------------------------------- housekeeping
 
-    def _forget_old(self) -> None:
-        finished = sorted((b for b in self.builds.values() if b.finished), key=lambda b: b.started)
-        for b in finished[:-KEEP_FINISHED]:
-            del self.builds[b.id]
-
-    @staticmethod
-    def clean_orphans(bot_exists: Callable[[str], bool]) -> list[str]:
-        """At start-up: uploads of builds that never became bots (the server stopped first)."""
-        removed = []
+    async def clean_orphans(self) -> list[str]:
+        """At start-up: uploads of builds that will never become bots."""
+        keep, removed = await self.store.active_bot_ids(), []
         if UPLOADS_DIR.exists():
             for folder in UPLOADS_DIR.iterdir():
-                if folder.is_dir() and not bot_exists(folder.name):
+                if folder.is_dir() and not self.bot_exists(folder.name) and folder.name not in keep:
                     shutil.rmtree(folder, ignore_errors=True)
                     removed.append(folder.name)
         return removed
 
-    async def close(self) -> None:
-        for b in self.builds.values():
-            if b.task and not b.task.done():
-                b.task.cancel()
+
+# ------------------------------------------------------------------ the worker's side
+
+def _describe(node: str, data: dict) -> str:
+    if node == "draft" and data.get("spec"):
+        return f"Drafted \"{data['spec'].get('name', '')}\""
+    if node == "validate":
+        problems = data.get("problems") or []
+        return f"Found {len(problems)} problem(s); drafting again" if problems else "The draft passed every check"
+    logs = data.get("log") or []
+    text = logs[-1] if logs else STAGES[node]
+    return text[:1].upper() + text[1:]
+
+
+async def _fail(store: BuildStore, row: dict, problems: list[str]) -> None:
+    await store.update(row["id"], status="failed", problems=problems)
+    shutil.rmtree(ROOT / row["folder"], ignore_errors=True)
+    await store.add_event(row["id"], "failed", "failed", problems=problems)
+
+
+async def run_build(store: BuildStore, make_graph: Callable, build_id: str, worker: str) -> None:
+    """Run one build up to its review (in the worker). Safe to call twice for the same build."""
+    row = await store.get(build_id)
+    if row is None or row["status"] not in WORKING:
+        return  # already finished: the job was delivered again after a worker crashed late
+    attempt = row["attempts"] + 1
+    if attempt > MAX_ATTEMPTS:
+        await _fail(store, row, [f"The build was given up after {MAX_ATTEMPTS} attempts (the worker kept stopping)."])
+        return
+    thread = f"build:{build_id}:{attempt}"  # a fresh checkpoint thread per attempt
+    row = await store.update(build_id, status="running", attempts=attempt, worker=worker, thread=thread)
+    config = {"configurable": {"thread_id": thread}}
+    try:
+        extra = {"attempt": attempt} if attempt > 1 else {}
+        await store.add_event(build_id, "started", "running", files=len(row["files"]), **extra)
+        graph = make_graph()
+        async for update in graph.astream({"bot_id": row["bot_id"], "use_case": row["use_case"],
+                                           "folder": row["folder"], "log": []}, config, stream_mode="updates"):
+            for node, data in update.items():
+                if node in STAGES:
+                    await store.add_event(build_id, node, "running", message=_describe(node, data or {}))
+        state = await graph.aget_state(config)
+        if state.interrupts:
+            await store.update(build_id, status="review", proposal=state.interrupts[0].value)
+            await store.add_event(build_id, "review", "review", message="Ready for review")
+        else:
+            await _fail(store, row, state.values.get("problems") or ["The builder stopped without a proposal."])
+    except (Exception, SystemExit) as e:  # ingest raises SystemExit when no file can be read
+        log.exception("build %s failed", build_id)
+        await _fail(store, row, [f"The build failed: {type(e).__name__}: {e}"])

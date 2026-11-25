@@ -59,7 +59,7 @@ class Knowledge(BaseModel):
     """The bot's own documents and vector collection (Step 10: one per bot)."""
 
     folder: str = Field(description="Folder of documents, relative to the project root.")
-    collection: str = Field(description="Chroma collection holding this bot's chunks.")
+    collection: str = Field(description="Name tagging this bot's chunks in the vector store.")
     subject: str = Field(description="What the documents are, e.g. 'the course material on counselling'.")
 
     @field_validator("folder")

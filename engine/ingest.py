@@ -68,7 +68,6 @@ def ingest(knowledge: Knowledge, quiet: bool = False) -> dict:
         chunk.metadata["source"] = str(Path(chunk.metadata["source"]).relative_to(knowledge.path))
     store = get_vectorstore(knowledge.collection)
     store.reset_collection()
-    # Chroma accepts only str/int/float/bool metadata values.
     store.add_documents(chunks, ids=[chunk_id(c) for c in chunks])
     stats = {"files": len(files), "chunks": len(chunks), "collection": knowledge.collection}
     if not quiet:

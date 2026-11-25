@@ -4,7 +4,7 @@ An ADR records one significant decision: the context, what was decided, the alte
 
 | ADR | Decision | Status |
 |---|---|---|
-| [0001](0001-chroma-as-vector-store.md) | Chroma as the vector store | Accepted |
+| [0001](0001-chroma-as-vector-store.md) | Chroma as the vector store | Superseded by [0027](0027-pgvector-as-vector-store.md) |
 | [0002](0002-local-embeddings-with-fastembed.md) | Local embeddings with fastembed (`bge-small-en-v1.5`) | Accepted |
 | [0003](0003-recursive-chunking-1000-150.md) | Recursive character chunking, 1000 characters, 150 overlap | Accepted |
 | [0004](0004-pin-all-dependency-versions.md) | Pin every dependency version | Accepted |
@@ -30,6 +30,7 @@ An ADR records one significant decision: the context, what was decided, the alte
 | [0024](0024-engine-and-lampus-folders.md) | Two folders: `engine/` (the bot builder, a Python package) and `lampus/` (the tutoring product); unused early steps archived | Accepted |
 | [0025](0025-postgres-for-users-quotas-and-audit.md) | Postgres with a connection pool for users, sessions, quotas and the audit log; quota and audit writes made atomic | Accepted |
 | [0026](0026-conversations-in-postgres.md) | Conversations (LangGraph checkpoints) in Postgres on their own pool, with a checked migration from SQLite | Accepted |
+| [0027](0027-pgvector-as-vector-store.md) | Document chunks in Postgres with pgvector (HNSW) | Accepted |
 
 Statuses: **Proposed** (under discussion), **Accepted**, **Superseded by NNNN** (replaced by a later decision; the old record is kept, not edited).
 

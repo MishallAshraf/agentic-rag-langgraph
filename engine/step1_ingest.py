@@ -88,13 +88,13 @@ def main():
     save_chunks(chunks)
     print(f"Saved chunks to {CHUNKS_DIR}")
 
-    # EMBED + STORE: Chroma calls the embedding model on every chunk and saves
-    # (vector, text, metadata) to disk. Reset first so re-running this script
+    # EMBED + STORE: the store calls the embedding model on every chunk and saves
+    # (vector, text, metadata) as rows in Postgres. Reset first so re-running this script
     # replaces the collection instead of adding duplicates.
     store = get_vectorstore()
     store.reset_collection()
     store.add_documents(chunks)
-    print(f"Stored {store._collection.count()} chunks in the vector store")
+    print(f"Stored {store.count()} chunks in the vector store")
 
     sample = chunks[len(chunks) // 2]
     print("\n--- sample chunk ---")

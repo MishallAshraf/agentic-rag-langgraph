@@ -44,9 +44,8 @@ def tokenize(text: str) -> list[str]:
     return [w for w in re.findall(r"[a-z0-9]+", text.lower()) if w not in STOPWORDS]
 
 
-# Searches can run in parallel threads (the agent's tools, the eval runner, later
-# the API). Without the lock, two threads can both see "not created yet" and
-# open the Chroma store at the same time, which Chroma rejects.
+# Searches can run in parallel threads (the agent's tools, the eval runner, the
+# API). The lock makes sure each Retriever and the reranker are built only once.
 _lock = threading.RLock()
 _reranker = None
 
@@ -64,14 +63,10 @@ class Retriever:
     def __init__(self, collection: str = CLEAN_COLLECTION):
         self.store = get_vectorstore(collection)
         # BM25 keeps its own index in memory, built from the same chunks.
-        data = self.store.get(where=BODY_ONLY, include=["documents", "metadatas"])
-        if not data["ids"]:
+        self.docs = self.store.get(where=BODY_ONLY)
+        if not self.docs:
             raise SystemExit(f"Collection '{collection}' is empty. Ingest its documents first "
                              "(python -m engine.step6_ingest, or python -m engine.ingest bots/<bot>.yaml).")
-        self.docs = [
-            Document(page_content=text, metadata=meta, id=doc_id)
-            for doc_id, text, meta in zip(data["ids"], data["documents"], data["metadatas"])
-        ]
         self.bm25 = BM25Okapi([tokenize(d.page_content) for d in self.docs])
 
     def vector(self, query: str, k: int) -> list[Document]:

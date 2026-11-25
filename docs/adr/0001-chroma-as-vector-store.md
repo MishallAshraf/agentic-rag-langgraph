@@ -1,6 +1,6 @@
 # 0001. Chroma as the vector store
 
-- Status: Accepted
+- Status: Superseded by [ADR 0027](0027-pgvector-as-vector-store.md) (Lampus Phase 1, Step 5)
 - Date: 2026-10-10
 - Step: 1
 - Revisited in: [ADR 0010](0010-hybrid-retrieval-with-reranking.md) (Step 6), which keeps this decision

@@ -42,7 +42,7 @@ Step 16 is done: an improvement loop. A red-team agent attacks a bot with realis
 
 Step 17 is in progress: error analysis. Instead of generic test sets, a bot's evaluation set is built from its own conversations: synthetic messages spread over how its users differ, labelled by a domain expert on a review page, grouped into the bot's own failure modes, with one judge per mode checked against the expert's labels. The café bot's 50 conversations are ready for labelling.
 
-Lampus Phase 1 is in progress: the engine is being made production-ready for [Lampus](lampus/README.md), a tutoring product built on it. Done so far: a load-test harness with a fake model ([loadtest](loadtest/README.md)), Linux support with CI, the `engine/` and `lampus/` folders ([ADR 0024](docs/adr/0024-engine-and-lampus-folders.md)), Postgres for users, quotas and the audit log, which took sign-in failures at 10 students at once from 90% to 0% ([ADR 0025](docs/adr/0025-postgres-for-users-quotas-and-audit.md)), and conversations in Postgres too ([ADR 0026](docs/adr/0026-conversations-in-postgres.md)).
+Lampus Phase 1 is in progress: the engine is being made production-ready for [Lampus](lampus/README.md), a tutoring product built on it. Done so far: a load-test harness with a fake model ([loadtest](loadtest/README.md)), Linux support with CI, the `engine/` and `lampus/` folders ([ADR 0024](docs/adr/0024-engine-and-lampus-folders.md)), Postgres for users, quotas and the audit log, which took sign-in failures at 10 students at once from 90% to 0% ([ADR 0025](docs/adr/0025-postgres-for-users-quotas-and-audit.md)), conversations in Postgres too ([ADR 0026](docs/adr/0026-conversations-in-postgres.md)), and document chunks moved from Chroma to Postgres with pgvector ([ADR 0027](docs/adr/0027-pgvector-as-vector-store.md)).
 
 ## Repository layout
 
@@ -74,13 +74,13 @@ python -m venv .venv
 
 The embedding model downloads automatically on the first run.
 
-Users, sessions, quotas, the audit log and conversations are stored in Postgres ([ADR 0025](docs/adr/0025-postgres-for-users-quotas-and-audit.md), [ADR 0026](docs/adr/0026-conversations-in-postgres.md)). In a Codespace it starts by itself; elsewhere, with Docker:
+Users, sessions, quotas, the audit log, conversations and document chunks (with pgvector) are stored in Postgres ([ADR 0025](docs/adr/0025-postgres-for-users-quotas-and-audit.md), [ADR 0026](docs/adr/0026-conversations-in-postgres.md), [ADR 0027](docs/adr/0027-pgvector-as-vector-store.md)). In a Codespace it starts by itself; elsewhere, with Docker:
 
 ```bash
 docker compose up -d db
 ```
 
-Any other Postgres works too: set `DATABASE_URL` in `.env`. The tests use the same database (each run makes and drops its own schema). If you used the engine before this change, copy your users, audit log and conversations across once:
+Any other Postgres works too: set `DATABASE_URL` in `.env`. The tests use the same database (each run makes and drops its own schema). The Postgres server needs the pgvector extension (the `pgvector/pgvector` image has it). If you used the engine before this change, copy your users, audit log, conversations and document chunks across once:
 
 ```bash
 python -m engine.migrate_sqlite_auth
@@ -88,6 +88,10 @@ python -m engine.migrate_sqlite_auth
 
 ```bash
 python -m engine.migrate_sqlite_checkpoints
+```
+
+```bash
+python -m engine.migrate_chroma
 ```
 
 From Step 2 an OpenRouter API key is needed. Copy `.env.example` to `.env` and put the key in it (create one at https://openrouter.ai/keys). `.env` stays on your machine and must never be shared.
@@ -327,7 +331,7 @@ Generating and running 50 conversations costs about USD 0.10; building the judge
 | Path | Contents |
 |---|---|
 | `documents/` | Source documents (PDF, DOCX) |
-| `vectorstore.py` | Shared embedding model and Chroma connection, used by ingestion and search |
+| `vectorstore.py` | Shared embedding model and the pgvector store (chunks in Postgres), used by ingestion and search |
 | `step1_ingest.py` | Load, split, embed and store |
 | `step1_search.py` | Similarity search over the stored chunks |
 | `step1_all_in_one.py` | Step 1 in a single file |
@@ -386,7 +390,7 @@ Generating and running 50 conversations costs about USD 0.10; building the judge
 | `notes/` | Generated: notes saved by the agent, per bot and per user |
 | `.env.example` | Template for `.env` (API key and model) |
 | `chunks/` | Generated: every chunk as a text file, for inspection |
-| `chroma_db/` | Generated: the persisted vector store |
+| `chroma_db/` | Generated before Lampus Phase 1, Step 5: the old Chroma store, read once by `engine/migrate_chroma.py` |
 | `docs/` | Roadmap, course notes and ADRs |
 
 ## Licence

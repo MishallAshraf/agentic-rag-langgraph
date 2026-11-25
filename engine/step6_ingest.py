@@ -94,7 +94,7 @@ def main():
     store = get_vectorstore(CLEAN_COLLECTION)
     store.reset_collection()
     store.add_documents(chunks, ids=[chunk_id(c) for c in chunks])
-    print(f"Stored {store._collection.count()} chunks in collection '{CLEAN_COLLECTION}'")
+    print(f"Stored {store.count()} chunks in collection '{CLEAN_COLLECTION}'")
 
 
 if __name__ == "__main__":

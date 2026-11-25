@@ -25,7 +25,7 @@ _BASE_URL = os.environ.get("TEST_DATABASE_URL") or os.environ.get(
 SCHEMA = f"test_{secrets.token_hex(4)}"
 with psycopg.connect(_BASE_URL, autocommit=True) as _conn:
     _conn.execute(f"CREATE SCHEMA {SCHEMA}")
-os.environ["DATABASE_URL"] = make_conninfo(_BASE_URL, options=f"-c search_path={SCHEMA}")
+os.environ["DATABASE_URL"] = make_conninfo(_BASE_URL, options=f"-c search_path={SCHEMA},public")
 
 
 @atexit.register

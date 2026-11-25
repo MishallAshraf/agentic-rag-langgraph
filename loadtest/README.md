@@ -19,7 +19,7 @@ docker compose exec db psql -U lampus -c "CREATE SCHEMA IF NOT EXISTS loadtest"
 
 ```powershell
 # 2. the API with load-test settings (limits raised so they don't hide the platform's own behaviour)
-$env:DATABASE_URL="host=localhost user=lampus password=lampus dbname=lampus options='-c search_path=loadtest'"
+$env:DATABASE_URL="host=localhost user=lampus password=lampus dbname=lampus options='-c search_path=loadtest,public'"
 $env:LLM_BASE_URL="http://127.0.0.1:8900/v1"; $env:API_RATE_LIMIT="1000"
 $env:QUOTA_TURNS_PER_DAY="100000"; $env:QUOTA_TOKENS_PER_DAY="100000000"
 .\.venv\Scripts\python.exe loadtest\run.py setup --users 50
@@ -104,3 +104,29 @@ Pool size at 50 conversations: a maximum of 4 connections gave 577 operations/s,
 
 At 25 students, the typical turn went from 6.6 s (Step 3) to 4.4 s and throughput from 1.60 to 1.93 turns/s. At 50 students nothing changed (1.88 → 1.90 turns/s): the single API process's CPU, busy with retrieval and reranking, is the limit there, not storage. That is Step 9's job.
 
+
+### Step 5: documents from Chroma to Postgres with pgvector
+
+Same laptop, 2026-11-25. See [ADR 0027](../docs/adr/0027-pgvector-as-vector-store.md).
+
+**Real bots** (`bench_vectors.py`): 43 eval questions over 3 bots, vector search only (top 10), checked against an exact numpy search.
+
+| Store | Search p50 / p95 | recall@10 |
+| --- | --- | --- |
+| Chroma (before) | 2.81 ms / 3.73 ms | 1.0 |
+| Postgres, exact inside the bot (after) | 2.15 ms / 2.99 ms | 1.0 |
+
+Both stores return the same top 10 for all 43 questions.
+
+**HNSW vs exact at 50,000 chunks** (`bench_hnsw.py`, synthetic vectors built from the real embeddings plus noise, 50 bots):
+
+| Search | recall@10 | p50 |
+| --- | --- | --- |
+| Whole table, exact | 1.0 | 42 ms |
+| Whole table, HNSW, ef_search 10 / 20 / 40 / 80 / 160 / 320 | 0.51 / 0.59 / 0.68 / 0.76 / 0.84 / 0.92 | 2.1 / 2.3 / 2.7 / 3.5 / 4.2 / 7.1 ms |
+| One bot, exact | 1.0 | 2.3 ms |
+| One bot, HNSW then filter, ef_search 40 / 160 | 0.07 / 0.29 | 1.5 / 3.0 ms |
+
+HNSW trades recall for speed, and ef_search sets the trade. But filtered to one bot, it finds the nearest chunks of all bots first and then discards 98% of them, returning 0.7 of 10 rows on average, and the planner chose that plan by itself. Lampus's bots are small enough for exact search, so the product has no HNSW index yet.
+
+The first run of this benchmark reported perfect recall for the filtered HNSW search. psycopg had prepared the repeated query, and Postgres kept reusing the exact plan after the planner settings changed. The benchmark now turns prepared statements off.

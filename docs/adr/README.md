@@ -30,7 +30,8 @@ An ADR records one significant decision: the context, what was decided, the alte
 | [0024](0024-engine-and-lampus-folders.md) | Two folders: `engine/` (the bot builder, a Python package) and `lampus/` (the tutoring product); unused early steps archived | Accepted |
 | [0025](0025-postgres-for-users-quotas-and-audit.md) | Postgres with a connection pool for users, sessions, quotas and the audit log; quota and audit writes made atomic | Accepted |
 | [0026](0026-conversations-in-postgres.md) | Conversations (LangGraph checkpoints) in Postgres on their own pool, with a checked migration from SQLite | Accepted |
-| [0027](0027-pgvector-as-vector-store.md) | Document chunks in Postgres with pgvector (HNSW) | Accepted |
+| [0027](0027-pgvector-as-vector-store.md) | Document chunks in Postgres with pgvector; exact search per bot, HNSW measured | Accepted |
+| [0028](0028-data-lineage-and-incremental-ingestion.md) | Data lineage (file hashes, ingest runs) and incremental ingestion | Accepted |
 
 Statuses: **Proposed** (under discussion), **Accepted**, **Superseded by NNNN** (replaced by a later decision; the old record is kept, not edited).
 

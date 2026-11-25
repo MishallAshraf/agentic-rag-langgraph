@@ -17,9 +17,9 @@ from pathlib import Path
 from langchain_core.documents import Document
 
 from engine.bot_config import Knowledge, load_bot
+from engine.lineage import sync
 from engine.step1_ingest import split_documents
 from engine.step6_ingest import load_docx, load_pdf
-from engine.vectorstore import get_vectorstore
 
 HEADING = re.compile(r"^(#{1,3})\s+(.+?)\s*#*\s*$")
 
@@ -60,18 +60,21 @@ def ingest(knowledge: Knowledge, quiet: bool = False) -> dict:
     files = sorted(f for f in knowledge.path.rglob("*") if f.suffix.lower() in LOADERS)
     if not files:
         raise SystemExit(f"No .pdf, .docx or .md files in {knowledge.folder}")
-    docs = []
-    for file in files:
-        docs.extend(LOADERS[file.suffix.lower()](file))
-    chunks = split_documents(docs)
-    for chunk in chunks:  # a stable, readable source label: path inside the folder
-        chunk.metadata["source"] = str(Path(chunk.metadata["source"]).relative_to(knowledge.path))
-    store = get_vectorstore(knowledge.collection)
-    store.reset_collection()
-    store.add_documents(chunks, ids=[chunk_id(c) for c in chunks])
-    stats = {"files": len(files), "chunks": len(chunks), "collection": knowledge.collection}
+
+    def chunk_file(file: Path) -> list[Document]:
+        chunks = split_documents(LOADERS[file.suffix.lower()](file))
+        for chunk in chunks:  # a stable, readable source label: path inside the folder
+            chunk.metadata["source"] = str(Path(chunk.metadata["source"]).relative_to(knowledge.path))
+        return chunks
+
+    # Step 6 of Lampus Phase 1: only new and edited files are re-chunked, and only
+    # chunks whose text changed are embedded again; every chunk records its lineage.
+    stats = sync(knowledge.collection, knowledge.path, files, chunk_file, chunk_id, loader="engine.ingest")
+    stats.update(files=len(files), collection=knowledge.collection)
     if not quiet:
-        print(f"Ingested {stats['files']} files as {stats['chunks']} chunks into '{knowledge.collection}'")
+        print(f"Ingested {stats['files']} files as {stats['chunks']} chunks into '{knowledge.collection}' "
+              f"(run {stats['run']}: {stats['files_changed']} files changed, {stats['files_removed']} removed; "
+              f"{stats['chunks_embedded']} chunks embedded, {stats['chunks_reused']} reused)")
     return stats
 
 

@@ -42,7 +42,7 @@ Step 16 is done: an improvement loop. A red-team agent attacks a bot with realis
 
 Step 17 is in progress: error analysis. Instead of generic test sets, a bot's evaluation set is built from its own conversations: synthetic messages spread over how its users differ, labelled by a domain expert on a review page, grouped into the bot's own failure modes, with one judge per mode checked against the expert's labels. The café bot's 50 conversations are ready for labelling.
 
-Lampus Phase 1 is in progress: the engine is being made production-ready for [Lampus](lampus/README.md), a tutoring product built on it. Done so far: a load-test harness with a fake model ([loadtest](loadtest/README.md)), Linux support with CI, the `engine/` and `lampus/` folders ([ADR 0024](docs/adr/0024-engine-and-lampus-folders.md)), Postgres for users, quotas and the audit log, which took sign-in failures at 10 students at once from 90% to 0% ([ADR 0025](docs/adr/0025-postgres-for-users-quotas-and-audit.md)), conversations in Postgres too ([ADR 0026](docs/adr/0026-conversations-in-postgres.md)), and document chunks moved from Chroma to Postgres with pgvector ([ADR 0027](docs/adr/0027-pgvector-as-vector-store.md)).
+Lampus Phase 1 is in progress: the engine is being made production-ready for [Lampus](lampus/README.md), a tutoring product built on it. Done so far: a load-test harness with a fake model ([loadtest](loadtest/README.md)), Linux support with CI, the `engine/` and `lampus/` folders ([ADR 0024](docs/adr/0024-engine-and-lampus-folders.md)), Postgres for users, quotas and the audit log, which took sign-in failures at 10 students at once from 90% to 0% ([ADR 0025](docs/adr/0025-postgres-for-users-quotas-and-audit.md)), conversations in Postgres too ([ADR 0026](docs/adr/0026-conversations-in-postgres.md)), document chunks moved from Chroma to Postgres with pgvector ([ADR 0027](docs/adr/0027-pgvector-as-vector-store.md)), and data lineage, which also makes re-indexing incremental: after one file is edited, 1 chunk is embedded instead of 225 ([ADR 0028](docs/adr/0028-data-lineage-and-incremental-ingestion.md)).
 
 ## Repository layout
 
@@ -231,7 +231,7 @@ The builder indexes the folder, drafts the bot, validates it (retrying with the 
 .\.venv\Scripts\python.exe evals/run_evals.py --bot bots/architecture_guide.yaml --dataset evals/bots/architecture_guide.yaml
 ```
 
-To re-index a bot's documents after they change: `python -m engine.ingest bots/<id>.yaml`. The included example, the "Design Decisions Guide", answers questions about this project's ADRs.
+To re-index a bot's documents after they change: `python -m engine.ingest bots/<id>.yaml`. Only new and edited files are processed. To see where a chunk came from: `python -m engine.lineage chunk <collection> <chunk id>`; recent runs: `python -m engine.lineage runs`. The included example, the "Design Decisions Guide", answers questions about this project's ADRs.
 
 ## Step 11: API with streaming
 
@@ -383,6 +383,7 @@ Generating and running 50 conversations costs about USD 0.10; building the judge
 | `evals/generate_candidates.py` | LLM-drafted test cases for human review |
 | `evals/setup_review.py`, `evals/calibrate.py` | Human review queue in Langfuse; judge-versus-human agreement |
 | `ingest.py` | Indexes a bot's folder (PDF, DOCX, Markdown split at headings) into its own collection |
+| `lineage.py` | Incremental ingestion and lineage: which file, file version, run and settings produced each chunk |
 | `step10_builder.py` | The bot builder: draft, validate, write tests, human review, save |
 | `evals/bots/` | Generated test cases for generated bots, one file per bot |
 | `evals/results/` | Generated: one JSON file per evaluation run |

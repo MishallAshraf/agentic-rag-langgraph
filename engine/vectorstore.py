@@ -85,6 +85,8 @@ class VectorStore:
     def reset_collection(self) -> None:
         with self.pool.connection() as conn:
             conn.execute("DELETE FROM chunks WHERE collection = %s", (self.collection,))
+            # Forget the files too (lineage, Step 6), so the next ingest redoes every file.
+            conn.execute("DELETE FROM source_files WHERE collection = %s", (self.collection,))
 
     def add_documents(self, docs: list[Document], ids: list[str] | None = None) -> list[str]:
         ids = ids or [str(uuid.uuid4()) for _ in docs]

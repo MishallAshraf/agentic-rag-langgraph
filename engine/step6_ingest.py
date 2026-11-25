@@ -24,8 +24,9 @@ import pymupdf
 from langchain_community.document_loaders import Docx2txtLoader
 from langchain_core.documents import Document
 
+from engine.lineage import sync
 from engine.step1_ingest import format_page, save_chunks, split_documents
-from engine.vectorstore import DOCUMENTS_DIR, ROOT, get_vectorstore
+from engine.vectorstore import DOCUMENTS_DIR, ROOT
 
 CLEAN_COLLECTION = "documents_clean"
 CHUNKS_DIR = ROOT / "chunks_clean"
@@ -76,25 +77,23 @@ def chunk_id(chunk: Document) -> str:
     return f"{name}:p{format_page(meta)}:{meta['section']}:{meta['start_index']}"
 
 
-def main():
-    docs = []
-    for file in sorted(DOCUMENTS_DIR.iterdir()):
-        loader = LOADERS.get(file.suffix.lower())
-        if loader:
-            loaded = loader(file)
-            print(f"Loaded {len(loaded):>3} documents from {file.name}")
-            docs.extend(loaded)
+def chunk_file(file: Path) -> list[Document]:
+    return split_documents(LOADERS[file.suffix.lower()](file))
 
-    chunks = split_documents(docs)
+
+def main():
+    files = [f for f in sorted(DOCUMENTS_DIR.iterdir()) if f.suffix.lower() in LOADERS]
+    chunks = [c for f in files for c in chunk_file(f)]
     body = sum(c.metadata["section"] == "body" for c in chunks)
-    print(f"Split into {len(chunks)} chunks ({body} body, {len(chunks) - body} references)")
+    print(f"Split {len(files)} files into {len(chunks)} chunks ({body} body, {len(chunks) - body} references)")
     save_chunks(chunks, CHUNKS_DIR)
     print(f"Saved chunks to {CHUNKS_DIR}")
 
-    store = get_vectorstore(CLEAN_COLLECTION)
-    store.reset_collection()
-    store.add_documents(chunks, ids=[chunk_id(c) for c in chunks])
-    print(f"Stored {store.count()} chunks in collection '{CLEAN_COLLECTION}'")
+    # Only new and edited files are stored again (lineage, Lampus Phase 1 Step 6).
+    stats = sync(CLEAN_COLLECTION, DOCUMENTS_DIR, files, chunk_file, chunk_id, loader="engine.step6_ingest")
+    print(f"Stored {stats['chunks']} chunks in collection '{CLEAN_COLLECTION}' (run {stats['run']}: "
+          f"{stats['files_changed']} files changed, {stats['chunks_embedded']} chunks embedded, "
+          f"{stats['chunks_reused']} reused)")
 
 
 if __name__ == "__main__":

@@ -130,3 +130,17 @@ Both stores return the same top 10 for all 43 questions.
 HNSW trades recall for speed, and ef_search sets the trade. But filtered to one bot, it finds the nearest chunks of all bots first and then discards 98% of them, returning 0.7 of 10 rows on average, and the planner chose that plan by itself. Lampus's bots are small enough for exact search, so the product has no HNSW index yet.
 
 The first run of this benchmark reported perfect recall for the filtered HNSW search. psycopg had prepared the repeated query, and Postgres kept reusing the exact plan after the planner settings changed. The benchmark now turns prepared statements off.
+
+### Step 6: data lineage and incremental ingestion
+
+Same laptop, 2026-11-25. See [ADR 0028](../docs/adr/0028-data-lineage-and-incremental-ingestion.md).
+
+`bench_ingest.py` ingests a copy of the 28 ADRs (224 chunks) three times: first, again with nothing changed, and after one paragraph is added to one file.
+
+| Run | Before: chunks embedded, time | After: chunks embedded, time |
+| --- | --- | --- |
+| First ingest | 224, 108 s | 224, 71 s |
+| Nothing changed | 224, 194 s | 0, 0.3 s |
+| One file edited | 225, 130 s | 1, 0.4 s |
+
+Before, every ingest deleted the collection and embedded everything again. Now an unchanged file is recognised by its hash and skipped, and in an edited file only chunks whose text changed are embedded. The before times vary a lot (108 s to 194 s for the same work): the laptop's CPU is shared with everything else running on it.

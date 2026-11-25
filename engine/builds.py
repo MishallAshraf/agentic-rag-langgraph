@@ -33,7 +33,7 @@ from typing import Callable
 from langgraph.types import Command
 from psycopg.types.json import Jsonb
 
-from engine import shared
+from engine import shared, webhooks
 from engine.bot_config import ID_PATTERN, ROOT
 
 log = logging.getLogger("builds")
@@ -273,7 +273,10 @@ class BuildManager:
             shutil.rmtree(ROOT / row["folder"], ignore_errors=True)
             await self.store.add_event(build_id, "rejected", "rejected",
                                        message="Rejected; the uploaded files were deleted")
-        return await self.store.get(build_id)
+        decided = await self.store.get(build_id)
+        await webhooks.emit("build.decided", {"build_id": build_id, "bot_id": row["bot_id"],
+                                              "status": decided["status"]})
+        return decided
 
     # ---------------------------------------------------------------- housekeeping
 
@@ -305,6 +308,7 @@ async def _fail(store: BuildStore, row: dict, problems: list[str]) -> None:
     await store.update(row["id"], status="failed", problems=problems)
     shutil.rmtree(ROOT / row["folder"], ignore_errors=True)
     await store.add_event(row["id"], "failed", "failed", problems=problems)
+    await webhooks.emit("build.finished", {"build_id": row["id"], "bot_id": row["bot_id"], "status": "failed"})
 
 
 async def run_build(store: BuildStore, make_graph: Callable, build_id: str, worker: str) -> None:
@@ -332,6 +336,7 @@ async def run_build(store: BuildStore, make_graph: Callable, build_id: str, work
         if state.interrupts:
             await store.update(build_id, status="review", proposal=state.interrupts[0].value)
             await store.add_event(build_id, "review", "review", message="Ready for review")
+            await webhooks.emit("build.finished", {"build_id": build_id, "bot_id": row["bot_id"], "status": "review"})
         else:
             await _fail(store, row, state.values.get("problems") or ["The builder stopped without a proposal."])
     except (Exception, SystemExit) as e:  # ingest raises SystemExit when no file can be read

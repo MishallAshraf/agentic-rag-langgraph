@@ -42,7 +42,7 @@ Step 16 is done: an improvement loop. A red-team agent attacks a bot with realis
 
 Step 17 is in progress: error analysis. Instead of generic test sets, a bot's evaluation set is built from its own conversations: synthetic messages spread over how its users differ, labelled by a domain expert on a review page, grouped into the bot's own failure modes, with one judge per mode checked against the expert's labels. The café bot's 50 conversations are ready for labelling.
 
-Lampus Phase 1 is in progress: the engine is being made production-ready for [Lampus](lampus/README.md), a tutoring product built on it. Done so far: a load-test harness with a fake model ([loadtest](loadtest/README.md)), Linux support with CI, the `engine/` and `lampus/` folders ([ADR 0024](docs/adr/0024-engine-and-lampus-folders.md)), Postgres for users, quotas and the audit log, which took sign-in failures at 10 students at once from 90% to 0% ([ADR 0025](docs/adr/0025-postgres-for-users-quotas-and-audit.md)), conversations in Postgres too ([ADR 0026](docs/adr/0026-conversations-in-postgres.md)), document chunks moved from Chroma to Postgres with pgvector ([ADR 0027](docs/adr/0027-pgvector-as-vector-store.md)), and data lineage, which also makes re-indexing incremental: after one file is edited, 1 chunk is embedded instead of 225 ([ADR 0028](docs/adr/0028-data-lineage-and-incremental-ingestion.md)), and Redis for the rate limits, conversation locks and search cache, so they hold across several API copies: with two copies, a student limited to 10 messages a minute got 20 through before and 10 after ([ADR 0029](docs/adr/0029-redis-for-shared-limits-locks-and-cache.md)), and bot builds through a queue to a separate worker, so a build survives the API copy that started it and the worker running it: before, killing the copy lost the build; now it finishes, and a dead worker's build is taken over by another ([ADR 0030](docs/adr/0030-build-queue-and-worker.md)), and three API copies behind nginx with a read replica for searches: when one copy is killed under load, every student is answered again within 20 s, where with one copy none was. Measuring it also found and fixed a hang: one copy under 50 students had stopped for good ([ADR 0031](docs/adr/0031-scale-out-nginx-and-read-replica.md)).
+Lampus Phase 1 is in progress: the engine is being made production-ready for [Lampus](lampus/README.md), a tutoring product built on it. Done so far: a load-test harness with a fake model ([loadtest](loadtest/README.md)), Linux support with CI, the `engine/` and `lampus/` folders ([ADR 0024](docs/adr/0024-engine-and-lampus-folders.md)), Postgres for users, quotas and the audit log, which took sign-in failures at 10 students at once from 90% to 0% ([ADR 0025](docs/adr/0025-postgres-for-users-quotas-and-audit.md)), conversations in Postgres too ([ADR 0026](docs/adr/0026-conversations-in-postgres.md)), document chunks moved from Chroma to Postgres with pgvector ([ADR 0027](docs/adr/0027-pgvector-as-vector-store.md)), and data lineage, which also makes re-indexing incremental: after one file is edited, 1 chunk is embedded instead of 225 ([ADR 0028](docs/adr/0028-data-lineage-and-incremental-ingestion.md)), and Redis for the rate limits, conversation locks and search cache, so they hold across several API copies: with two copies, a student limited to 10 messages a minute got 20 through before and 10 after ([ADR 0029](docs/adr/0029-redis-for-shared-limits-locks-and-cache.md)), and bot builds through a queue to a separate worker, so a build survives the API copy that started it and the worker running it: before, killing the copy lost the build; now it finishes, and a dead worker's build is taken over by another ([ADR 0030](docs/adr/0030-build-queue-and-worker.md)), and three API copies behind nginx with a read replica for searches: when one copy is killed under load, every student is answered again within 20 s, where with one copy none was. Measuring it also found and fixed a hang: one copy under 50 students had stopped for good ([ADR 0031](docs/adr/0031-scale-out-nginx-and-read-replica.md)), and the API under `/v1` with idempotency keys and signed webhooks: a resent message is played back instead of running again (10 duplicate turns of 10 resends before, 0 after), and a school's server that checks the signatures accepted 0 of 200 forged, changed, replayed or stale messages ([ADR 0032](docs/adr/0032-api-v1-idempotency-and-signed-webhooks.md)).
 
 ## Repository layout
 
@@ -312,6 +312,12 @@ docker compose --profile scale up -d nginx db-replica
 
 Give each copy `DATABASE_READ_URL` pointing at the replica (port 5433). `loadtest/start_copies.sh` does all of this for the load tests.
 
+The API's routes are under `/v1` (the old paths still answer, marked deprecated). To send webhooks to a school's server when a build finishes or a conversation is flagged, set `WEBHOOK_URL` and a secret, which the school uses to check each message's signature ([ADR 0032](docs/adr/0032-api-v1-idempotency-and-signed-webhooks.md)):
+
+```bash
+python -m engine.webhooks secret
+```
+
 ## Step 16: the improvement loop
 
 Run it on any bot with documents. `--dry-run` writes nothing and stops at the proposal:
@@ -378,7 +384,9 @@ Generating and running 50 conversations costs about USD 0.10; building the judge
 | `bots/research_assistant.yaml` | A research bot over the study assistant's and the design guide's documents |
 | `tests/test_research.py` | Tests for the team's control flow and permissions, with a scripted model |
 | `builds.py` | The builder as a queued job: upload checks, builds and progress events in Postgres, review decision |
-| `worker.py` | The build worker: takes builds from the Redis queue and runs them |
+| `worker.py` | The build worker: takes builds from the Redis queue and runs them, and delivers webhooks |
+| `idempotency.py` | Idempotency keys: a resent request gets the first response back instead of running again |
+| `webhooks.py` | Signed webhooks to a school's server (Standard Webhooks), queued and retried |
 | `tests/test_builds.py` | Tests for uploads, build progress, review and publishing, with a stand-in builder |
 | `tests/_env.py` | Shared test settings (a throwaway user database) for the API test suites |
 | `improve.py` | Improvement loop: red team, judge, researcher, engineer, architect, human approval |

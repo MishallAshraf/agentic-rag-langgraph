@@ -28,7 +28,7 @@ import socket
 import redis
 
 import engine.db  # noqa: F401  (first: on Windows it switches to the event loop psycopg needs)
-from engine import shared
+from engine import shared, webhooks
 from engine.builds import QUEUE, BuildStore, run_build
 
 log = logging.getLogger("worker")
@@ -81,8 +81,11 @@ async def main() -> None:
         async with postgres_checkpointer() as checkpointer:
             # The builder pauses for review in the shared checkpointer, so whichever
             # API copy receives the admin's decision can resume it.
-            await work(BuildStore(pool), lambda: build_builder(get_llm(model=BUILDER_MODEL), checkpointer),
-                       worker_name())
+            # Builds one at a time, and webhooks to schools' servers alongside (Step 10).
+            await asyncio.gather(
+                work(BuildStore(pool), lambda: build_builder(get_llm(model=BUILDER_MODEL), checkpointer),
+                     worker_name()),
+                webhooks.deliver_loop(worker_name()))
     finally:
         await pool.close()
 

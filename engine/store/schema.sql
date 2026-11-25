@@ -88,3 +88,16 @@ CREATE TABLE IF NOT EXISTS build_events (
     event    JSONB NOT NULL,
     PRIMARY KEY (build_id, n)
 );
+
+-- Lampus Phase 1, Step 10: idempotency keys (engine/idempotency.py). The first
+-- request with a key inserts the row; a resend finds it and gets the stored response.
+CREATE TABLE IF NOT EXISTS idempotency_keys (
+    username     TEXT NOT NULL,
+    key          TEXT NOT NULL,              -- chosen by the client, unique per user
+    request_hash TEXT NOT NULL,              -- the same key on a different request is refused
+    status       TEXT NOT NULL,              -- running, done
+    response     JSONB,
+    created      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (username, key)
+);
+CREATE INDEX IF NOT EXISTS idempotency_keys_created ON idempotency_keys (created);

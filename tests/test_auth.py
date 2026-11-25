@@ -215,6 +215,69 @@ class AuthTests(unittest.TestCase):
         self.assertEqual(self.last_action("quota.exceeded")[0], "bob")
         self.assertEqual(self.bob.get("/auth/me").json()["usage"]["turns"], 3)
 
+    # ------------------------------------------------------------ /v1 and idempotency keys (Phase 1, Step 10)
+
+    def test_v1_paths_and_deprecated_old_paths(self):
+        new, old = self.bob.get("/v1/bots"), self.bob.get("/bots")
+        self.assertEqual(new.json(), old.json())
+        self.assertNotIn("deprecation", new.headers)
+        self.assertEqual(old.headers["deprecation"], "true")
+        self.assertIn('</v1/bots>; rel="successor-version"', old.headers["link"])
+        self.assertNotIn("deprecation", self.anon.get("/health").headers)
+
+    def test_resent_new_conversation_returns_the_same_one(self):
+        key = {"Idempotency-Key": secrets.token_hex(8)}
+        first = self.bob.post("/v1/bots/architecture_guide/threads", headers=key)
+        again = self.bob.post("/v1/bots/architecture_guide/threads", headers=key)
+        self.assertEqual(first.json()["thread_id"], again.json()["thread_id"])
+        self.assertEqual(again.headers.get("idempotent-replayed"), "true")
+        other = self.bob.post("/v1/bots/architecture_guide/threads", headers={"Idempotency-Key": secrets.token_hex(8)})
+        self.assertNotEqual(other.json()["thread_id"], first.json()["thread_id"])
+        bad = self.bob.post("/v1/bots/architecture_guide/threads", headers={"Idempotency-Key": "no spaces!"})
+        self.assertEqual(bad.status_code, 400)
+
+    def test_resent_message_is_played_back_not_run_again(self):
+        from engine.idempotency import request_hash
+        thread = self.bob.post("/v1/bots/architecture_guide/threads").json()["thread_id"]
+        path, key = f"/v1/bots/architecture_guide/threads/{thread}/messages", secrets.token_hex(8)
+        # The first send of this message ran and was answered (stored as the app stores it).
+        store = api.app.state.idempotency
+        done = {"event": "done", "data": '{"answer": "It opens at 9.", "sources": [], "guard": "ok"}'}
+
+        async def first_send_finished():
+            await store.claim("bob", key, request_hash("message", "architecture_guide", thread, "When?"))
+            await store.finish("bob", key, done)
+        self.client.portal.call(first_send_finished)
+        turns = self.bob.get("/v1/auth/me").json()["usage"]["turns"]
+        r = self.bob.post(path, json={"text": "When?"}, headers={"Idempotency-Key": key})
+        self.assertEqual(r.headers.get("idempotent-replayed"), "true")
+        self.assertIn("It opens at 9.", r.text)
+        self.assertEqual(self.bob.get("/v1/auth/me").json()["usage"]["turns"], turns)  # not charged again
+        # The same key on a different message is a client bug.
+        self.assertEqual(self.bob.post(path, json={"text": "Other"}, headers={"Idempotency-Key": key}).status_code, 422)
+
+    def test_a_message_still_running_or_refused(self):
+        from engine.idempotency import request_hash
+        thread = self.bob.post("/v1/bots/architecture_guide/threads").json()["thread_id"]
+        path, key = f"/v1/bots/architecture_guide/threads/{thread}/messages", secrets.token_hex(8)
+        store = api.app.state.idempotency
+        self.client.portal.call(store.claim, "bob", key, request_hash("message", "architecture_guide", thread, "hi"))
+        r = self.bob.post(path, json={"text": "hi"}, headers={"Idempotency-Key": key})  # the first is still running
+        self.assertEqual((r.status_code, r.headers.get("retry-after")), (409, "5"))
+        # A request refused before it runs (here: the daily quota) gives its key back.
+        with db() as conn:
+            conn.execute("INSERT INTO usage VALUES ('bob', %s, 3, 0) ON CONFLICT (username, day) "
+                         "DO UPDATE SET turns = 3, tokens = 0", (today(),))
+        key2 = secrets.token_hex(8)
+        try:
+            r = self.bob.post(path, json={"text": "hi"}, headers={"Idempotency-Key": key2})
+            self.assertEqual(r.status_code, 429)
+            with db() as conn:
+                self.assertIsNone(conn.execute("SELECT 1 FROM idempotency_keys WHERE key = %s", (key2,)).fetchone())
+        finally:
+            with db() as conn:  # give bob his quota back for the other tests
+                conn.execute("DELETE FROM usage WHERE username = 'bob'")
+
     # ------------------------------------------------------------ audit log (last: it edits the log)
 
     def test_z_editing_the_audit_log_is_detected(self):

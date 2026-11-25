@@ -222,3 +222,27 @@ A copy killed after 15 s, 20 students chatting without pause, 45 s watched:
 | 3 copies, 15 s renewed locks | 6 | 20 of 20 | 19.4 s |
 
 Searches with the cache off: 25 of 25 chunk reads on the primary without a replica; 3 of 33 with one (each copy loading its keyword index). The replica was 1.9 ms behind the primary at the median (27 ms p95), and 14 ms (161 ms p95) with the CPU saturated.
+
+### Step 10: resent messages and webhooks
+
+GitHub Codespace (2 cores, Linux), 2026-11-26. See [ADR 0032](../docs/adr/0032-api-v1-idempotency-and-signed-webhooks.md).
+
+```bash
+export WEBHOOK_URL=http://127.0.0.1:8950/hook WEBHOOK_SECRET=$(python -m engine.webhooks secret)
+WORKERS=1 bash loadtest/start_copies.sh 1
+python loadtest/bench_idempotency.py --prefix /v1   # each of 10 students resends one message with the same key
+python loadtest/bench_webhooks.py                   # 50 genuine webhooks, 200 attacks, a 3 s outage
+bash loadtest/start_copies.sh stop
+```
+
+| Resent messages (10 students) | Before: no keys | After: Idempotency-Key |
+| --- | --- | --- |
+| Messages in their conversation twice | 10 of 10 | 0 of 10 |
+| Turns run and charged | 20 | 10 |
+
+| Webhooks: receiver | Genuine acted on | Attacks acted on (forged, changed, replayed, stale) |
+| --- | --- | --- |
+| Accepts every POST | 50, plus 20 duplicates from retries | 200 of 200 |
+| Checks signature, timestamp, id | 50 of 50 | 0 of 200 |
+
+The 50 genuine events took 70 delivery attempts: 20 hit the receiver's 3-second outage and arrived on the first retry, 5 s later.

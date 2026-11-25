@@ -18,6 +18,16 @@ refusals, turns, approvals, admin changes). Each row stores a hash of the
 previous row, so editing or deleting a past row breaks the chain, and
 `python -m engine.manage_users audit --verify` finds where. Message text is never
 logged: only who, what, when and how much.
+
+Storage: Postgres through the shared connection pool in engine/db.py (Lampus
+Phase 1, Step 3; before that, one SQLite connection shared by every request).
+Each method borrows a connection for one unit of work; writes that must happen
+together run in one transaction. Two rules keep concurrent requests consistent
+(course topic 6):
+  - a turn is reserved against the daily quota in ONE conditional statement, so
+    two parallel conversations can't both take the last turn;
+  - audit rows are chained under a transaction-scoped lock, so two writers
+    can't both link to the same previous row.
 """
 
 import hashlib
@@ -25,16 +35,14 @@ import json
 import os
 import re
 import secrets
-import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import date, datetime, timedelta, timezone
 
-import aiosqlite
 import bcrypt
+from psycopg import errors
+from psycopg_pool import AsyncConnectionPool
 
-ROOT = Path(__file__).resolve().parent.parent
-AUTH_DB = Path(os.getenv("AUTH_DB", str(ROOT / "data" / "auth.sqlite")))
+from engine.db import DATABASE_URL, open_pool
 
 USERNAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]{2,31}$")  # also a folder name for notes
 ROLES = ("admin", "member")
@@ -48,60 +56,20 @@ QUOTA_TOKENS = int(os.getenv("QUOTA_TOKENS_PER_DAY", "300000"))
 # as long as a wrong password and response times do not reveal who has an account.
 _DUMMY_HASH = bcrypt.hashpw(b"no such user", bcrypt.gensalt(rounds=12))
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS users (
-    username TEXT PRIMARY KEY,
-    password_hash TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('admin', 'member')),
-    disabled INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS sessions (
-    token_hash TEXT PRIMARY KEY,          -- sha256 of the token: a stolen database holds no usable tokens
-    username TEXT NOT NULL REFERENCES users(username),
-    expires_at REAL NOT NULL
-);
-CREATE TABLE IF NOT EXISTS grants (
-    username TEXT NOT NULL REFERENCES users(username),
-    bot_id TEXT NOT NULL,
-    PRIMARY KEY (username, bot_id)
-);
-CREATE TABLE IF NOT EXISTS threads (
-    thread_id TEXT PRIMARY KEY,
-    bot_id TEXT NOT NULL,
-    username TEXT NOT NULL REFERENCES users(username),
-    created_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS usage (
-    username TEXT NOT NULL,
-    day TEXT NOT NULL,
-    turns INTEGER NOT NULL DEFAULT 0,
-    tokens INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (username, day)
-);
-CREATE TABLE IF NOT EXISTS audit (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ts TEXT NOT NULL,
-    actor TEXT NOT NULL,
-    action TEXT NOT NULL,
-    bot_id TEXT,
-    thread_id TEXT,
-    detail TEXT,
-    ip TEXT,
-    prev_hash TEXT NOT NULL,
-    hash TEXT NOT NULL
-);
-"""
-
 GENESIS = "0" * 64
+AUDIT_LOCK = "hashtext('lampus.audit')"  # one writer at a time extends the chain
 
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def today() -> str:
-    return datetime.now(timezone.utc).date().isoformat()
+def today() -> date:
+    return datetime.now(timezone.utc).date()
+
+
+def _iso(value) -> str:
+    return value.isoformat(timespec="seconds") if isinstance(value, datetime) else value
 
 
 def check_username(username: str):
@@ -136,30 +104,34 @@ class User:
 
 
 class AuthStore:
-    def __init__(self, path: Path = AUTH_DB):
-        self.path = Path(path)
-        self.db: aiosqlite.Connection | None = None
+    def __init__(self, url: str = DATABASE_URL):
+        self.url = url
+        self.pool: AsyncConnectionPool | None = None
 
     async def open(self):
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.db = await aiosqlite.connect(self.path, isolation_level=None)  # autocommit; explicit BEGIN below
-        self.db.row_factory = aiosqlite.Row
-        await self.db.execute("PRAGMA journal_mode=WAL")  # the API and the CLI may use it at the same time
-        await self.db.execute("PRAGMA foreign_keys=ON")
-        await self.db.executescript(SCHEMA)
+        self.pool = await open_pool(self.url)
         return self
 
     async def close(self):
-        if self.db:
-            await self.db.close()
+        if self.pool:
+            await self.pool.close()
+
+    @staticmethod
+    def _params(args: tuple):
+        """Positional values for %s, or one dict for %(name)s."""
+        return args[0] if len(args) == 1 and isinstance(args[0], dict) else args
+
+    async def _run(self, sql: str, *args):
+        async with self.pool.connection() as conn:
+            await conn.execute(sql, self._params(args))
 
     async def _one(self, sql: str, *args):
-        async with self.db.execute(sql, args) as cur:
-            return await cur.fetchone()
+        async with self.pool.connection() as conn:
+            return await (await conn.execute(sql, self._params(args))).fetchone()
 
     async def _all(self, sql: str, *args):
-        async with self.db.execute(sql, args) as cur:
-            return await cur.fetchall()
+        async with self.pool.connection() as conn:
+            return await (await conn.execute(sql, self._params(args))).fetchall()
 
     # ---------------------------------------------------------------- users
 
@@ -170,29 +142,32 @@ class AuthStore:
             raise ValueError(f"role must be one of {ROLES}")
         hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12)).decode()
         try:
-            await self.db.execute("INSERT INTO users VALUES (?, ?, ?, 0, ?)", (username, hashed, role, now_iso()))
-        except aiosqlite.IntegrityError:
+            await self._run("INSERT INTO users (username, password_hash, role) VALUES (%s, %s, %s)",
+                            username, hashed, role)
+        except errors.UniqueViolation:
             raise ValueError(f"user '{username}' already exists") from None
 
     async def set_password(self, username: str, password: str):
         check_password(password)
         hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt(rounds=12)).decode()
         await self._require_user(username)
-        await self.db.execute("UPDATE users SET password_hash = ? WHERE username = ?", (hashed, username))
-        await self.end_sessions(username)  # a new password signs out every old session
+        async with self.pool.connection() as conn, conn.transaction():
+            await conn.execute("UPDATE users SET password_hash = %s WHERE username = %s", (hashed, username))
+            await conn.execute("DELETE FROM sessions WHERE username = %s", (username,))  # sign out everywhere
 
     async def set_disabled(self, username: str, disabled: bool):
         await self._require_user(username)
-        await self.db.execute("UPDATE users SET disabled = ? WHERE username = ?", (int(disabled), username))
-        if disabled:
-            await self.end_sessions(username)
+        async with self.pool.connection() as conn, conn.transaction():
+            await conn.execute("UPDATE users SET disabled = %s WHERE username = %s", (disabled, username))
+            if disabled:
+                await conn.execute("DELETE FROM sessions WHERE username = %s", (username,))
 
     async def _require_user(self, username: str):
-        if not await self._one("SELECT 1 FROM users WHERE username = ?", username):
+        if not await self._one("SELECT 1 FROM users WHERE username = %s", username):
             raise ValueError(f"no user '{username}'")
 
     async def authenticate(self, username: str, password: str) -> User | None:
-        row = await self._one("SELECT * FROM users WHERE username = ?", username)
+        row = await self._one("SELECT * FROM users WHERE username = %s", username)
         candidate = password.encode()[:MAX_PASSWORD_BYTES]
         if row is None:
             bcrypt.checkpw(candidate, _DUMMY_HASH)  # same work as a real check
@@ -202,21 +177,21 @@ class AuthStore:
         return User(row["username"], row["role"])
 
     async def list_users(self) -> list[dict]:
-        rows = await self._all("SELECT username, role, disabled, created_at FROM users ORDER BY username")
-        result = []
-        for r in rows:
-            bots = [g["bot_id"] for g in await self._all(
-                "SELECT bot_id FROM grants WHERE username = ? ORDER BY bot_id", r["username"])]
-            result.append({**dict(r), "bots": bots})
-        return result
+        rows = await self._all(
+            "SELECT u.username, u.role, u.disabled::int AS disabled, u.created_at, "
+            "COALESCE(array_agg(g.bot_id ORDER BY g.bot_id) FILTER (WHERE g.bot_id IS NOT NULL), '{}') AS bots "
+            "FROM users u LEFT JOIN grants g ON g.username = u.username "
+            "GROUP BY u.username ORDER BY u.username")
+        return [{**r, "created_at": _iso(r["created_at"]), "bots": list(r["bots"])} for r in rows]
 
     # ---------------------------------------------------------------- sessions
 
     async def start_session(self, username: str) -> str:
         token = secrets.token_urlsafe(32)
-        await self.db.execute("DELETE FROM sessions WHERE expires_at < ?", (time.time(),))
-        await self.db.execute("INSERT INTO sessions VALUES (?, ?, ?)",
-                              (hash_token(token), username, time.time() + SESSION_TTL_S))
+        async with self.pool.connection() as conn, conn.transaction():
+            await conn.execute("DELETE FROM sessions WHERE expires_at < now()")
+            await conn.execute("INSERT INTO sessions VALUES (%s, %s, now() + %s)",
+                               (hash_token(token), username, timedelta(seconds=SESSION_TTL_S)))
         return token
 
     async def user_for_session(self, token: str | None) -> User | None:
@@ -224,67 +199,90 @@ class AuthStore:
             return None
         row = await self._one(
             "SELECT u.username, u.role FROM sessions s JOIN users u ON u.username = s.username "
-            "WHERE s.token_hash = ? AND s.expires_at > ? AND u.disabled = 0", hash_token(token), time.time())
+            "WHERE s.token_hash = %s AND s.expires_at > now() AND NOT u.disabled", hash_token(token))
         return User(row["username"], row["role"]) if row else None
 
     async def end_session(self, token: str):
-        await self.db.execute("DELETE FROM sessions WHERE token_hash = ?", (hash_token(token),))
+        await self._run("DELETE FROM sessions WHERE token_hash = %s", hash_token(token))
 
     async def end_sessions(self, username: str):
-        await self.db.execute("DELETE FROM sessions WHERE username = ?", (username,))
+        await self._run("DELETE FROM sessions WHERE username = %s", username)
 
     # ---------------------------------------------------------------- bots
 
     async def grant(self, username: str, bot_id: str):
         await self._require_user(username)
-        await self.db.execute("INSERT OR IGNORE INTO grants VALUES (?, ?)", (username, bot_id))
+        await self._run("INSERT INTO grants VALUES (%s, %s) ON CONFLICT DO NOTHING", username, bot_id)
 
     async def revoke(self, username: str, bot_id: str):
-        await self.db.execute("DELETE FROM grants WHERE username = ? AND bot_id = ?", (username, bot_id))
+        await self._run("DELETE FROM grants WHERE username = %s AND bot_id = %s", username, bot_id)
 
     async def can_use(self, user: User, bot_id: str) -> bool:
         if user.is_admin:
             return True
-        return await self._one("SELECT 1 FROM grants WHERE username = ? AND bot_id = ?",
+        return await self._one("SELECT 1 FROM grants WHERE username = %s AND bot_id = %s",
                                user.username, bot_id) is not None
 
     # ---------------------------------------------------------------- conversations
 
     async def add_thread(self, thread_id: str, bot_id: str, username: str):
-        await self.db.execute("INSERT INTO threads VALUES (?, ?, ?, ?)", (thread_id, bot_id, username, now_iso()))
+        await self._run("INSERT INTO threads (thread_id, bot_id, username) VALUES (%s, %s, %s)",
+                        thread_id, bot_id, username)
 
     async def owns_thread(self, user: User, bot_id: str, thread_id: str) -> bool | None:
         """True if it is theirs, False if it is someone else's, None if there is no such thread."""
-        row = await self._one("SELECT bot_id, username FROM threads WHERE thread_id = ?", thread_id)
+        row = await self._one("SELECT bot_id, username FROM threads WHERE thread_id = %s", thread_id)
         if row is None:
             return None
         return row["bot_id"] == bot_id and row["username"] == user.username
 
     async def threads_for(self, username: str, bot_id: str) -> list[dict]:
-        rows = await self._all("SELECT thread_id, created_at FROM threads WHERE username = ? AND bot_id = ? "
+        rows = await self._all("SELECT thread_id, created_at FROM threads WHERE username = %s AND bot_id = %s "
                                "ORDER BY created_at DESC", username, bot_id)
-        return [dict(r) for r in rows]
+        return [{**r, "created_at": _iso(r["created_at"])} for r in rows]
 
     # ---------------------------------------------------------------- quotas
 
     async def usage_today(self, username: str) -> dict:
-        row = await self._one("SELECT turns, tokens FROM usage WHERE username = ? AND day = ?", username, today())
+        row = await self._one("SELECT turns, tokens FROM usage WHERE username = %s AND day = %s", username, today())
         turns, tokens = (row["turns"], row["tokens"]) if row else (0, 0)
         return {"turns": turns, "tokens": tokens, "turn_limit": QUOTA_TURNS, "token_limit": QUOTA_TOKENS}
 
-    async def over_quota(self, username: str) -> str | None:
-        u = await self.usage_today(username)
-        if u["turns"] >= u["turn_limit"]:
-            return f"Daily limit of {u['turn_limit']} messages reached. It resets at midnight UTC."
-        if u["tokens"] >= u["token_limit"]:
-            return f"Daily limit of {u['token_limit']:,} tokens reached. It resets at midnight UTC."
+    @staticmethod
+    def _quota_message(usage: dict) -> str | None:
+        if usage["turns"] >= usage["turn_limit"]:
+            return f"Daily limit of {usage['turn_limit']} messages reached. It resets at midnight UTC."
+        if usage["tokens"] >= usage["token_limit"]:
+            return f"Daily limit of {usage['token_limit']:,} tokens reached. It resets at midnight UTC."
         return None
 
+    async def over_quota(self, username: str) -> str | None:
+        """A quick early check, before any work. Not enough on its own: see reserve_turn."""
+        return self._quota_message(await self.usage_today(username))
+
+    async def reserve_turn(self, username: str) -> str | None:
+        """Count one turn, only if the user is still under quota. None if reserved, else the reason.
+
+        Checking in one statement and adding in another lets two parallel conversations
+        both see "one turn left" and both go ahead. Here the check is the WHERE of the
+        write itself: Postgres locks the row, so the second request sees the first one's turn.
+        """
+        row = await self._one(
+            "INSERT INTO usage (username, day, turns, tokens) "
+            "SELECT %(u)s, %(d)s, 1, 0 WHERE %(turns)s > 0 "
+            "ON CONFLICT (username, day) DO UPDATE SET turns = usage.turns + 1 "
+            "WHERE usage.turns < %(turns)s AND usage.tokens < %(tokens)s "
+            "RETURNING turns",
+            {"u": username, "d": today(), "turns": QUOTA_TURNS, "tokens": QUOTA_TOKENS})
+        if row:
+            return None
+        return self._quota_message(await self.usage_today(username)) or "Daily limit reached."
+
     async def add_usage(self, username: str, turns: int, tokens: int):
-        await self.db.execute(
-            "INSERT INTO usage VALUES (?, ?, ?, ?) ON CONFLICT (username, day) "
-            "DO UPDATE SET turns = turns + excluded.turns, tokens = tokens + excluded.tokens",
-            (username, today(), turns, tokens))
+        await self._run(
+            "INSERT INTO usage VALUES (%s, %s, %s, %s) ON CONFLICT (username, day) "
+            "DO UPDATE SET turns = usage.turns + excluded.turns, tokens = usage.tokens + excluded.tokens",
+            username, today(), turns, tokens)
 
     # ---------------------------------------------------------------- audit log
 
@@ -292,25 +290,22 @@ class AuthStore:
                     detail: dict | None = None, ip: str | None = None):
         fields = {"ts": now_iso(), "actor": actor, "action": action, "bot_id": bot_id, "thread_id": thread_id,
                   "detail": json.dumps(detail, sort_keys=True) if detail else None, "ip": ip}
-        # IMMEDIATE: take the write lock before reading the last hash, so two
-        # writers (the API and the CLI) cannot both chain onto the same row.
-        await self.db.execute("BEGIN IMMEDIATE")
-        try:
-            last = await self._one("SELECT hash FROM audit ORDER BY id DESC LIMIT 1")
+        # Own connection, own transaction. The lock lasts until COMMIT; concurrent
+        # writers queue for it instead of reading the same "last hash".
+        async with self.pool.connection() as conn, conn.transaction():
+            await conn.execute(f"SELECT pg_advisory_xact_lock({AUDIT_LOCK})")
+            last = await (await conn.execute("SELECT hash FROM audit ORDER BY id DESC LIMIT 1")).fetchone()
             prev = last["hash"] if last else GENESIS
-            await self.db.execute(
+            await conn.execute(
                 "INSERT INTO audit (ts, actor, action, bot_id, thread_id, detail, ip, prev_hash, hash) "
-                "VALUES (:ts, :actor, :action, :bot_id, :thread_id, :detail, :ip, :prev_hash, :hash)",
+                "VALUES (%(ts)s, %(actor)s, %(action)s, %(bot_id)s, %(thread_id)s, %(detail)s, %(ip)s, "
+                "%(prev_hash)s, %(hash)s)",
                 {**fields, "prev_hash": prev, "hash": row_hash(prev, fields)})
-            await self.db.execute("COMMIT")
-        except Exception:
-            await self.db.execute("ROLLBACK")
-            raise
 
     async def audit_entries(self, limit: int = 50) -> list[dict]:
         rows = await self._all("SELECT id, ts, actor, action, bot_id, thread_id, detail, ip FROM audit "
-                               "ORDER BY id DESC LIMIT ?", limit)
-        return [{**dict(r), "detail": json.loads(r["detail"]) if r["detail"] else None} for r in rows]
+                               "ORDER BY id DESC LIMIT %s", limit)
+        return [{**r, "detail": json.loads(r["detail"]) if r["detail"] else None} for r in rows]
 
     async def verify_audit(self) -> tuple[bool, int, int | None]:
         """(intact, rows checked, id of the first row that does not match)."""

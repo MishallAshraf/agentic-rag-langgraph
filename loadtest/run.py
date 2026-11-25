@@ -42,8 +42,7 @@ QUESTIONS = ["What vegan options do you have?", "Can I get a refund for a cold c
 # ------------------------------------------------------------------ setup
 
 async def setup(users: int):
-    sys.path.insert(0, str(ROOT))
-    from engine.auth import AuthStore  # reads AUTH_DB from the environment
+    from engine.auth import AuthStore  # reads DATABASE_URL from the environment
 
     store = await AuthStore().open()
     made = 0
@@ -56,7 +55,7 @@ async def setup(users: int):
             pass
         await store.grant(name, BOT)
     await store.close()
-    print(f"{made} new users, {users} granted {BOT} (database: {os.environ.get('AUTH_DB')})")
+    print(f"{made} new users, {users} granted {BOT} (database: {os.environ.get('DATABASE_URL', 'default')})")
 
 
 # ------------------------------------------------------------------ one student
@@ -149,6 +148,10 @@ def main():
     r.add_argument("--label", default="", help="what this run measures, e.g. 'baseline, 1 API process'")
     args = parser.parse_args()
     if args.command == "setup":
+        # Imported before the event loop starts: on Windows, engine.db switches the loop type.
+        sys.path.insert(0, str(ROOT))
+        import engine.db  # noqa: F401
+
         asyncio.run(setup(args.users))
     else:
         asyncio.run(run(args.url, args.users, args.turns, args.timeout, args.label))

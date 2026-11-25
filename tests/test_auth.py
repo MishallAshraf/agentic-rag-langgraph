@@ -9,7 +9,6 @@ here is answered (or refused) before a model would be involved.
 import asyncio
 import os
 import secrets
-import sqlite3
 import sys
 import unittest
 from pathlib import Path
@@ -18,6 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import tests._env  # noqa: E402, F401
 
+import psycopg  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from engine import api  # noqa: E402
@@ -38,7 +38,8 @@ async def make_users():
 
 
 def db():
-    return sqlite3.connect(os.environ["AUTH_DB"])
+    """A direct connection to the test schema, for checks the API doesn't expose."""
+    return psycopg.connect(os.environ["DATABASE_URL"], autocommit=True)
 
 
 class As:
@@ -91,7 +92,7 @@ class AuthTests(unittest.TestCase):
 
     def last_action(self, action):
         with db() as conn:
-            return conn.execute("SELECT actor, bot_id, thread_id, detail FROM audit WHERE action = ? "
+            return conn.execute("SELECT actor, bot_id, thread_id, detail FROM audit WHERE action = %s "
                                 "ORDER BY id DESC LIMIT 1", (action,)).fetchone()
 
     # ------------------------------------------------------------ authentication
@@ -194,7 +195,8 @@ class AuthTests(unittest.TestCase):
     def test_daily_turn_quota_is_enforced_before_any_model_call(self):
         thread = self.bob.post("/bots/architecture_guide/threads").json()["thread_id"]
         with db() as conn:
-            conn.execute("INSERT OR REPLACE INTO usage VALUES ('bob', ?, 3, 0)", (today(),))
+            conn.execute("INSERT INTO usage VALUES ('bob', %s, 3, 0) ON CONFLICT (username, day) "
+                         "DO UPDATE SET turns = 3, tokens = 0", (today(),))
         r = self.bob.post(f"/bots/architecture_guide/threads/{thread}/messages", json={"text": "hello"})
         self.assertEqual(r.status_code, 429)
         self.assertIn("Daily limit", r.json()["detail"])

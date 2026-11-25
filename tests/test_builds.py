@@ -35,7 +35,7 @@ from engine.step10_builder import BuildState, save_files  # noqa: E402
 
 
 class As:
-    """One running app, many users (as in test_auth: importing it would change AUTH_DB)."""
+    """One running app, many users (as in test_auth: importing it would change DATABASE_URL)."""
 
     def __init__(self, client: TestClient):
         self.client, self.token = client, None

@@ -89,6 +89,9 @@ pillow==12.3.0
 propcache==0.5.4
 protobuf==7.36.2
 psutil==7.2.2
+psycopg==3.3.9
+psycopg-binary==3.3.9
+psycopg-pool==3.3.3
 py_rust_stemmers==0.1.8
 pybase64==1.5.1
 pycparser==3.12
@@ -132,6 +135,7 @@ truststore==0.10.4
 typer==0.27.3
 typing-inspection==0.4.4
 typing_extensions==4.16.0
+tzdata==2026.6; sys_platform == "win32"
 urllib3==2.8.0
 uuid_utils==0.17.1
 uvicorn==0.54.0

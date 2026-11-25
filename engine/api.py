@@ -49,6 +49,7 @@ import json
 import logging
 import os
 import re
+import sys
 import time
 import uuid
 from collections import defaultdict, deque
@@ -549,8 +550,12 @@ async def send_message(request: Request, bot_id: str, thread_id: str, body: Mess
         raise HTTPException(409, "A reply in this conversation is still being written.")
     if await pending_approval(graph, config):
         raise HTTPException(409, "This conversation is waiting for an approval decision.")
-    # Counted when it starts, so parallel conversations cannot overrun the turn quota.
-    await auth.add_usage(user.username, turns=1, tokens=0)
+    # Counted when it starts, in one conditional write, so parallel conversations
+    # cannot overrun the turn quota (check_quota above is only the early, cheap check).
+    problem = await auth.reserve_turn(user.username)
+    if problem:
+        await auth.audit(user.username, "quota.exceeded", bot_id=bot_id, ip=client_ip(request))
+        raise HTTPException(429, problem)
     await auth.audit(user.username, "turn.start", bot_id=bot_id, thread_id=thread_id, ip=client_ip(request),
                      detail={"chars": len(body.text)})
     graph_input = {"messages": [HumanMessage(body.text)]}
@@ -747,4 +752,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     # Still localhost only: sessions travel in a cookie that needs HTTPS (API_COOKIE_SECURE=true)
     # before this may listen on a network.
-    uvicorn.run(app, host="127.0.0.1", port=int(os.getenv("API_PORT", "8000")))
+    # On Windows, "none" makes uvicorn use the Selector loop engine.db asks for (uvicorn's
+    # own Windows default, Proactor, can't run psycopg in async mode). Linux keeps uvicorn's default.
+    uvicorn.run(app, host="127.0.0.1", port=int(os.getenv("API_PORT", "8000")),
+                loop="none" if sys.platform == "win32" else "auto")

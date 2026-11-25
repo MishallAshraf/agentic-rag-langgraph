@@ -29,6 +29,7 @@ An ADR records one significant decision: the context, what was decided, the alte
 | [0023](0023-run-on-linux-codespaces-and-ci.md) | Run on Linux: Windows-only packages behind platform markers, a Codespaces dev container, tests in CI on every push | Accepted |
 | [0024](0024-engine-and-lampus-folders.md) | Two folders: `engine/` (the bot builder, a Python package) and `lampus/` (the tutoring product); unused early steps archived | Accepted |
 | [0025](0025-postgres-for-users-quotas-and-audit.md) | Postgres with a connection pool for users, sessions, quotas and the audit log; quota and audit writes made atomic | Accepted |
+| [0026](0026-conversations-in-postgres.md) | Conversations (LangGraph checkpoints) in Postgres on their own pool, with a checked migration from SQLite | Accepted |
 
 Statuses: **Proposed** (under discussion), **Accepted**, **Superseded by NNNN** (replaced by a later decision; the old record is kept, not edited).
 

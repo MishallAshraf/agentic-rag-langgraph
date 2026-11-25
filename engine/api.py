@@ -65,7 +65,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from langchain_core.callbacks import UsageMetadataCallbackHandler
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 from sse_starlette import EventSourceResponse, ServerSentEvent
@@ -74,9 +73,9 @@ from engine import analysis
 from engine import step9_agent
 from engine import step14_research
 from engine.auth import SESSION_TTL_S, AuthStore, User
+from engine.db import postgres_checkpointer
 from engine.builds import MAX_FILE_BYTES, MAX_FILES, MAX_TOTAL_BYTES, Build, BuildManager, UploadProblem
 from engine.bot_config import BotConfig, Theme, load_bot
-from engine.step5_agent import CHECKPOINT_DB
 from engine.step7_agent import SOURCE_TOOLS, current_turn
 from engine.tool_registry import load_tools, uses_user_data
 
@@ -166,10 +165,9 @@ class RateLimiter:
 async def lifespan(app: FastAPI):
     from engine.llm import get_llm
 
-    CHECKPOINT_DB.parent.mkdir(exist_ok=True)
     app.state.auth = await AuthStore().open()
     try:
-        async with AsyncSqliteSaver.from_conn_string(str(CHECKPOINT_DB)) as checkpointer:
+        async with postgres_checkpointer() as checkpointer:  # conversations (Lampus Phase 1, Step 4)
             app.state.platform = Platform(checkpointer, get_llm())
             app.state.platform.load_bots()
             app.state.limiter = RateLimiter(RATE_LIMIT, RATE_WINDOW_S)

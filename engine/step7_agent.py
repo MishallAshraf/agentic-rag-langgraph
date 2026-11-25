@@ -31,17 +31,17 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.messages.utils import count_tokens_approximately
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 from langgraph.types import Command, interrupt
 from pydantic import BaseModel, Field
 
+from engine.db import postgres_checkpointer
 from engine.bot_config import BotConfig, load_bot
 from engine.search_graph import build_search_graph
 from engine.step4_agent import ask_human, print_update
-from engine.step5_agent import CHECKPOINT_DB, list_threads, make_compact, thread_config
+from engine.step5_agent import list_threads, make_compact, thread_config
 from engine.tool_registry import load_tools
 from engine.llm import STRUCTURED_METHOD
 
@@ -187,8 +187,7 @@ async def main():
     args = parser.parse_args()
 
     bot = load_bot(args.bot)
-    CHECKPOINT_DB.parent.mkdir(exist_ok=True)
-    async with AsyncSqliteSaver.from_conn_string(str(CHECKPOINT_DB)) as checkpointer:
+    async with postgres_checkpointer() as checkpointer:
         if args.list:
             await list_threads(checkpointer, bot)
             return

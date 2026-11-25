@@ -33,17 +33,19 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.messages.utils import count_tokens_approximately
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 from langgraph.types import Command, interrupt
 
+from engine.db import postgres_checkpointer
 from engine.bot_config import BotConfig, load_bot
 from engine.step4_agent import ask_human, print_update
 from engine.tool_registry import load_tools
 
 DEFAULT_BOT = "bots/study_assistant.yaml"
+# The SQLite file conversations were saved in before Lampus Phase 1, Step 4 (now Postgres);
+# kept as the default source for python -m engine.migrate_sqlite_checkpoints.
 CHECKPOINT_DB = Path(os.getenv("CHECKPOINT_DB", str(Path(__file__).resolve().parent.parent / "data" / "checkpoints.sqlite")))
 RECURSION_LIMIT = 12
 
@@ -202,8 +204,7 @@ async def main():
     args = parser.parse_args()
 
     bot = load_bot(args.bot)
-    CHECKPOINT_DB.parent.mkdir(exist_ok=True)
-    async with AsyncSqliteSaver.from_conn_string(str(CHECKPOINT_DB)) as checkpointer:
+    async with postgres_checkpointer() as checkpointer:
         if args.list:
             await list_threads(checkpointer, bot)
             return

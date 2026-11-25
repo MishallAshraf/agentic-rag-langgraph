@@ -26,17 +26,17 @@ import uuid
 from typing import NotRequired
 
 from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage, ToolMessage
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import Command
 
 from engine import step7_agent
+from engine.db import postgres_checkpointer
 from engine.bot_config import BotConfig, load_bot
 from engine.guardrails import (CRISIS_REPLY, amark_as_data, injection_reply, leaks, make_input_check,
                         mark_as_data, new_canary, with_canary)
 from engine.step4_agent import ask_human, print_update
-from engine.step5_agent import CHECKPOINT_DB, list_threads, thread_config
+from engine.step5_agent import list_threads, thread_config
 from engine.step7_agent import DEFAULT_BOT, print_answer
 from engine.tool_registry import load_tools
 
@@ -156,8 +156,7 @@ async def main():
     args = parser.parse_args()
 
     bot = load_bot(args.bot)
-    CHECKPOINT_DB.parent.mkdir(exist_ok=True)
-    async with AsyncSqliteSaver.from_conn_string(str(CHECKPOINT_DB)) as checkpointer:
+    async with postgres_checkpointer() as checkpointer:
         if args.list:
             await list_threads(checkpointer, bot)
             return

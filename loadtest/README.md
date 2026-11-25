@@ -6,7 +6,7 @@ The model is faked (`mock_llm.py`): it speaks the OpenAI API with a fixed delay 
 
 ## How to run
 
-Three terminals in the repository root, with Postgres running (`docker compose up -d db`). The API uses its own `loadtest` schema in Postgres and a throwaway checkpoint file under `data/loadtest/` (ignored by git), so your real users and conversations are untouched. Create the schema once:
+Three terminals in the repository root, with Postgres running (`docker compose up -d db`). The API uses its own `loadtest` schema in Postgres, so your real users and conversations are untouched. Create the schema once:
 
 ```powershell
 docker compose exec db psql -U lampus -c "CREATE SCHEMA IF NOT EXISTS loadtest"
@@ -20,7 +20,6 @@ docker compose exec db psql -U lampus -c "CREATE SCHEMA IF NOT EXISTS loadtest"
 ```powershell
 # 2. the API with load-test settings (limits raised so they don't hide the platform's own behaviour)
 $env:DATABASE_URL="host=localhost user=lampus password=lampus dbname=lampus options='-c search_path=loadtest'"
-$env:CHECKPOINT_DB="data/loadtest/checkpoints.sqlite"
 $env:LLM_BASE_URL="http://127.0.0.1:8900/v1"; $env:API_RATE_LIMIT="1000"
 $env:QUOTA_TURNS_PER_DAY="100000"; $env:QUOTA_TOKENS_PER_DAY="100000000"
 .\.venv\Scripts\python.exe loadtest\run.py setup --users 50
@@ -77,4 +76,31 @@ Same laptop and settings, 2026-11-25. Postgres 16 on the same machine. Still one
 What the numbers show next:
 - **Throughput levels off at about 1.9 turns per second.** More students only make everyone wait longer (typical turn 1.8 s for one student, 9.5 s for 50). One process on a dual-core laptop is now the limit: retrieval and reranking run on its CPU. This is the "before" for Step 9 (several API copies behind a load balancer; topics 1 and 2).
 - **The slow tail at 10 students (p95 9.8 s) most likely comes from sign-in (not yet confirmed).** Password checks (bcrypt, deliberately slow) run on the event loop, so while ten students sign in at once, the first students' turns wait. Moving them to a worker thread is a small follow-up, recorded for the latency topic (54).
+
+### Step 4: conversations (LangGraph checkpoints) in Postgres
+
+Same laptop, 2026-11-25. Everything the API stores is now in Postgres; documents are still in Chroma (Step 5).
+
+**The conversation store on its own** (`bench_checkpoints.py`): N conversations at once, each doing 10 turns of "read the latest checkpoint, save 4 new ones" with growing history, no model.
+
+| Conversations at once | SQLite: operations/s | SQLite: one turn's saving, p50 / p95 | Postgres: operations/s | Postgres: one turn's saving, p50 / p95 |
+| --- | --- | --- | --- | --- |
+| 1 | 419 | 11 ms / 25 ms | 311 | 12 ms / 35 ms |
+| 10 | 465 | 104 ms / 133 ms | 581 | 80 ms / 107 ms |
+| 50 | 467 | 550 ms / 631 ms | 692 | 367 ms / 399 ms |
+
+**Before → after at 50 conversations: one turn's saving 550 ms → 367 ms (p50), throughput +48%.** SQLite stays flat at about 465 operations per second however many conversations there are: they all queue for its one connection. Postgres keeps gaining as conversations are added, up to what a dual-core laptop running both the benchmark and the database allows. For a single conversation, SQLite is a little faster: it's a file in the same process, with no network round trip.
+
+Pool size at 50 conversations: a maximum of 4 connections gave 577 operations/s, 10 gave 692, 20 gave 604. More connections than the CPU can serve just compete with each other, so the pool stays at 10.
+
+**The whole API** (`run.py`, same settings as Step 3):
+
+| Students at once | Completed | Errors | Throughput | TTFT p50 / p95 | Turn p50 / p95 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 3 of 3 | none | 0.43 turns/s | 1.30 s / 2.54 s | 1.77 s / 3.02 s |
+| 10 | 30 of 30 | none | 1.27 turns/s | 1.76 s / 8.99 s | 2.34 s / 9.74 s |
+| 25 | 75 of 75 | none | 1.93 turns/s | 2.67 s / 4.85 s | 4.35 s / 5.87 s |
+| 50 | 150 of 150 | none | 1.90 turns/s | 4.82 s / 9.80 s | 10.06 s / 10.93 s |
+
+At 25 students, the typical turn went from 6.6 s (Step 3) to 4.4 s and throughput from 1.60 to 1.93 turns/s. At 50 students nothing changed (1.88 → 1.90 turns/s): the single API process's CPU, busy with retrieval and reranking, is the limit there, not storage. That is Step 9's job.
 

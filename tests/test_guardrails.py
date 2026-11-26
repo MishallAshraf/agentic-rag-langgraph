@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 import yaml
 
-from guardrails import CRISIS_PATTERNS, GUARD_PROMPT, InputCheck, make_input_check
+from engine.guardrails import CRISIS_PATTERNS, GUARD_PROMPT, InputCheck, make_input_check
 
 ROOT = Path(__file__).resolve().parent.parent
 BOT = SimpleNamespace(name="Harbour Bean Café Assistant", description="Answers café questions.")

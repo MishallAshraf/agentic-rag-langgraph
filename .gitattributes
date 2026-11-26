@@ -1,0 +1,4 @@
+# Store text files with Linux line endings (LF) in the repository; Git converts them on
+# checkout as each machine prefers. Shell scripts always stay LF, or Linux can't run them.
+* text=auto
+*.sh text eol=lf

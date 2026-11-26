@@ -4,7 +4,7 @@ An ADR records one significant decision: the context, what was decided, the alte
 
 | ADR | Decision | Status |
 |---|---|---|
-| [0001](0001-chroma-as-vector-store.md) | Chroma as the vector store | Accepted |
+| [0001](0001-chroma-as-vector-store.md) | Chroma as the vector store | Superseded by [0027](0027-pgvector-as-vector-store.md) |
 | [0002](0002-local-embeddings-with-fastembed.md) | Local embeddings with fastembed (`bge-small-en-v1.5`) | Accepted |
 | [0003](0003-recursive-chunking-1000-150.md) | Recursive character chunking, 1000 characters, 150 overlap | Accepted |
 | [0004](0004-pin-all-dependency-versions.md) | Pin every dependency version | Accepted |
@@ -26,6 +26,16 @@ An ADR records one significant decision: the context, what was decided, the alte
 | [0020](0020-bot-builder-as-a-service.md) | The bot builder as a service: checked uploads, a background job with resumable progress, review in the browser, no restart | Accepted |
 | [0021](0021-improvement-loop-red-team-research-fix-verify.md) | Improvement loop: red team, research, engineer, architect; fixes limited to checked learned rules a person approves | Accepted |
 | [0022](0022-error-analysis-per-bot-eval-sets.md) | Error analysis: each bot's eval set, failure modes and judges come from its own conversations, labelled by a domain expert | Accepted |
+| [0023](0023-run-on-linux-codespaces-and-ci.md) | Run on Linux: Windows-only packages behind platform markers, a Codespaces dev container, tests in CI on every push | Accepted |
+| [0024](0024-engine-and-lampus-folders.md) | Two folders: `engine/` (the bot builder, a Python package) and `lampus/` (the tutoring product); unused early steps archived | Accepted |
+| [0025](0025-postgres-for-users-quotas-and-audit.md) | Postgres with a connection pool for users, sessions, quotas and the audit log; quota and audit writes made atomic | Accepted |
+| [0026](0026-conversations-in-postgres.md) | Conversations (LangGraph checkpoints) in Postgres on their own pool, with a checked migration from SQLite | Accepted |
+| [0027](0027-pgvector-as-vector-store.md) | Document chunks in Postgres with pgvector; exact search per bot, HNSW measured | Accepted |
+| [0028](0028-data-lineage-and-incremental-ingestion.md) | Data lineage (file hashes, ingest runs) and incremental ingestion | Accepted |
+| [0029](0029-redis-for-shared-limits-locks-and-cache.md) | Redis for rate limits (token buckets per student and bot), conversation locks and the search cache | Accepted |
+| [0030](0030-build-queue-and-worker.md) | Bot builds through a Redis Streams queue to a separate worker; progress in Postgres, pub/sub to notify | Accepted |
+| [0031](0031-scale-out-nginx-and-read-replica.md) | Three API copies behind nginx, a read replica for searches, renewed 15 s conversation locks; a hang under load fixed | Accepted |
+| [0032](0032-api-v1-idempotency-and-signed-webhooks.md) | The API under /v1, idempotency keys for resent requests, signed webhooks to schools (Standard Webhooks) | Accepted |
 
 Statuses: **Proposed** (under discussion), **Accepted**, **Superseded by NNNN** (replaced by a later decision; the old record is kept, not edited).
 

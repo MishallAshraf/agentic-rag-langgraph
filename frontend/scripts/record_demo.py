@@ -1,6 +1,6 @@
 """Record real conversations for the frontend's replay demo.
 
-Runs against the local API (python api.py) and saves every streamed event with
+Runs against the local API (python -m engine.api) and saves every streamed event with
 its timing to src/demo/recordings.json. The replay build (VITE_REPLAY=1) plays
 these back, so the public demo needs no server, no key and costs nothing.
 

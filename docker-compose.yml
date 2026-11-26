@@ -1,0 +1,80 @@
+# Local services for the engine (Lampus Phase 1). Run in a Codespace or anywhere with Docker:
+#
+#   docker compose up -d db redis  # Postgres on localhost:5432, Redis on localhost:6379
+#   python -m engine.api           # the API, using DATABASE_URL from .env (or the default below)
+#
+# Scaled out (Phase 1, Step 9): nginx on port 8000 in front of API copies on 8001-8003,
+# and a read replica of Postgres on 5433. loadtest/start_copies.sh starts them with the copies:
+#
+#   docker compose --profile scale up -d nginx db-replica
+
+services:
+  db:
+    # Postgres 16 with the pgvector extension, which Step 5 uses for document search.
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: lampus
+      POSTGRES_PASSWORD: lampus      # local development only; never a real password
+      POSTGRES_DB: lampus
+    # Our own access rules: the image's, plus replication connections for the read replica.
+    command: ["postgres", "-c", "hba_file=/etc/lampus/pg_hba.conf"]
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/pg_hba.conf:/etc/lampus/pg_hba.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lampus -d lampus"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    # Shared state for every API copy: rate limits, conversation locks, the search
+    # cache (Phase 1, Step 7). Kept in memory only: losing it loses nothing that matters
+    # (limits refill, locks expire, the cache refills), so there is no volume.
+    image: redis:7.4-alpine
+    # At most 256 MB; when full, evict the least recently used keys first.
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  db-replica:
+    # A read replica (Step 9, course topic 7): copies the primary once, then streams
+    # every change from it. Searches read here (DATABASE_READ_URL). No volume: it is
+    # copied afresh when recreated, so it can never fall too far behind.
+    profiles: ["scale"]
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_PASSWORD: lampus      # local development only
+    entrypoint: ["/bin/sh", "/replica-entrypoint.sh"]
+    volumes:
+      - ./deploy/replica-entrypoint.sh:/replica-entrypoint.sh:ro
+    ports:
+      - "5433:5432"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lampus -d lampus"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+
+  nginx:
+    # The load balancer (Step 9, course topic 2): port 8000, spreading requests over the
+    # API copies on 8001-8003 (deploy/nginx.conf). The host's network, because the
+    # copies run on the host, not in containers.
+    profiles: ["scale"]
+    image: nginx:1.27-alpine
+    network_mode: host
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
+volumes:
+  pgdata:

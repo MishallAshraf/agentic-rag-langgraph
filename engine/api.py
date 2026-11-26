@@ -1,0 +1,944 @@
+"""Step 11 - The agent behind an HTTP API, streaming over Server-Sent Events.
+Step 13 - With users: sign-in, per-bot access, private conversations, quotas, audit log.
+Step 15 - With the bot builder: admins upload documents and approve new bots (builds.py).
+Lampus Phase 1, Step 10 - Versioned under /v1, idempotency keys, signed webhooks (course topic 9).
+
+Every route below is served under /v1 (GET /v1/bots, ...). The same paths without
+/v1 still work for now, for clients written before it, but answer with a
+"Deprecation: true" header and a link to the /v1 path. A future, incompatible
+change goes under /v2 while /v1 keeps working. /health stays unversioned.
+
+POST .../threads and POST .../messages take an optional Idempotency-Key header
+(8-128 letters, digits, - _ : .). Send a new random key with each new request and
+the same key when resending one: a resend of a finished request gets the first
+response back (with "Idempotent-Replayed: true") instead of running again. See
+engine/idempotency.py. Webhooks to a school's server: engine/webhooks.py.
+
+    POST /auth/login                               sign in -> session cookie
+    POST /auth/logout                              sign out (the session is deleted on the server)
+    GET  /auth/me                                  who am I, and today's usage
+    GET  /health                                   is the server up (no sign-in needed)
+    GET  /bots                                     the bots this user may use, public fields only
+    GET  /bots/{bot}                               one bot (never its system prompt)
+    GET  /bots/{bot}/threads                       this user's conversations with the bot
+    POST /bots/{bot}/threads                       start a conversation -> thread_id
+    GET  /bots/{bot}/threads/{thread}              its messages, and a pending approval if any
+    POST /bots/{bot}/threads/{thread}/messages     send a message; the reply streams back (SSE)
+    POST /bots/{bot}/threads/{thread}/approval     approve or reject a paused tool call (SSE)
+    GET  /admin/audit                              latest audit events and the chain check (admins)
+    POST /admin/builds                             upload documents and start building a bot (admins)
+    GET  /admin/builds                             recent builds
+    GET  /admin/builds/{build}                     one build: progress, and its proposal when ready
+    GET  /admin/builds/{build}/events              its progress as it happens (SSE, resumable)
+    POST /admin/builds/{build}/decision            approve (the bot is served at once) or reject
+
+Why Server-Sent Events: an answer takes 5-30 s (guard, search, grading,
+fact check). SSE keeps one HTTP response open and sends events as they
+happen, so the user sees progress and the answer as it is written. It is
+plain HTTP, one direction (server to browser), and reconnects by itself;
+WebSockets would add a two-way channel this API does not need.
+
+Events in a stream, in order:
+    status    {"stage": ...}                 received, guard verdict, tool calls, fact check
+    token     {"message_id", "text"}         part of the answer as the model writes it
+    approval  {"tool_calls": [...]}          the turn paused; POST .../approval to continue
+    error     {"type"}                       the turn failed; the conversation was repaired
+    done      {"answer", "sources", ...}     the final answer: this, not the tokens, is authoritative
+
+Tokens are a preview. The fact check (Step 7) can reject a draft after it was
+streamed; the next draft then streams under a new message_id, and "done"
+carries the answer that was actually kept.
+
+Authorization answers "not found" both for things that do not exist and for
+things that belong to someone else, so nobody can probe which bots or
+conversations exist. See auth.py for the rules and the audit log.
+
+    python -m engine.api          # http://127.0.0.1:8000, docs at /docs
+"""
+
+import asyncio
+import json
+import logging
+import os
+import re
+import sys
+import time
+import uuid
+from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Literal
+
+from dotenv import load_dotenv
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response
+from starlette.datastructures import UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from langchain_core.callbacks import UsageMetadataCallbackHandler
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
+from langgraph.types import Command
+from pydantic import BaseModel, Field
+from sse_starlette import EventSourceResponse, ServerSentEvent
+
+from engine import analysis
+from engine import step9_agent
+from engine import step14_research
+from engine.auth import SESSION_TTL_S, AuthStore, User
+from engine import shared
+from engine import webhooks
+from engine.idempotency import IdempotencyStore, KeyInUse, KeyReused, request_hash
+from engine.db import postgres_checkpointer
+from engine.builds import (MAX_FILE_BYTES, MAX_FILES, MAX_TOTAL_BYTES, BuildManager, BuildStore, UploadProblem,
+                           detail)
+from engine.bot_config import BotConfig, Theme, load_bot
+from engine.step7_agent import SOURCE_TOOLS, current_turn
+from engine.tool_registry import load_tools, uses_user_data
+
+load_dotenv()  # before the API_* settings below are read
+log = logging.getLogger("api")
+
+BOTS_DIR = Path(__file__).resolve().parent.parent / "bots"
+TURN_TIMEOUT_S = float(os.getenv("API_TURN_TIMEOUT", "120"))  # latency budget for one turn
+# Threads for the agents' synchronous tools (the document search). Python's default is
+# min(32, CPU cores + 4): 6 on a 2-core machine, so one copy ran only 6 searches at once
+# and the rest queued (measured in Lampus Phase 1, Step 9). 0 keeps Python's default.
+TOOL_THREADS = int(os.getenv("API_TOOL_THREADS", "0"))
+# A conversation lock lasts this long unless its turn renews it (see conversation_lock).
+LOCK_TTL_S = float(os.getenv("API_LOCK_TTL", "15"))
+RATE_LIMIT = int(os.getenv("API_RATE_LIMIT", "10"))            # turns per student per minute (and burst)
+BOT_RATE_LIMIT = int(os.getenv("API_BOT_RATE_LIMIT", "300"))    # turns per bot (a school's tutor) per minute
+# Run queued bot builds inside this process too (Step 8). On by default so one command
+# works on a laptop; off when separate workers run (python -m engine.worker).
+RUN_WORKER = os.getenv("API_RUN_WORKER", "1") == "1"
+LOGIN_LIMIT = 5                                                # sign-in attempts per address and name per minute
+MAX_MESSAGE_CHARS = 4000
+CORS_ORIGINS = os.getenv("API_CORS_ORIGINS", "http://localhost:5173").split(",")  # Vite dev server
+COOKIE_NAME = "session"
+COOKIE_SECURE = os.getenv("API_COOKIE_SECURE", "false").lower() == "true"  # true behind HTTPS
+THREAD_PATTERN = re.compile(r"^[a-f0-9]{32}$")
+SOURCE_PATTERN = re.compile(r"^\[\d+\] (.+)$", re.MULTILINE)  # "[1] file, page 4" in search results
+ANSWER_NODES = {"agent", "write"}  # nodes whose model output is the answer (Step 7 agent, Step 14 writer)
+
+
+# ------------------------------------------------------------------ bots and their graphs
+
+@dataclass
+class BotEntry:
+    config: BotConfig
+    graphs: dict = field(default_factory=dict)  # "" for a shared graph, or one per user
+    build_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+
+class Platform:
+    """Everything the server shares between requests."""
+
+    def __init__(self, checkpointer, llm):
+        self.checkpointer, self.llm = checkpointer, llm
+        self.bots: dict[str, BotEntry] = {}
+
+    def load_bots(self):
+        for path in sorted(BOTS_DIR.glob("*.yaml")):
+            try:
+                bot = load_bot(path)
+            except Exception as e:  # one broken file must not take the others down
+                log.error("skipping %s: %s", path.name, e)
+                continue
+            self.bots[bot.id] = BotEntry(bot)
+
+    def add_bot(self, bot_id: str):
+        """Serve a bot the builder just saved, without a restart (Step 15)."""
+        bot = load_bot(BOTS_DIR / f"{bot_id}.yaml")
+        self.bots[bot.id] = BotEntry(bot)
+
+    async def graph_for(self, entry: BotEntry, user: User):
+        # A bot whose tools keep per-user data (notes) gets one graph per user,
+        # with tools bound to that user's folder; other bots share one graph.
+        key = user.username if uses_user_data(entry.config) else ""
+        async with entry.build_lock:
+            if key not in entry.graphs:
+                if entry.config.research:  # Step 14: a research team over other bots' documents
+                    bots = {bot_id: e.config for bot_id, e in self.bots.items()}
+                    entry.graphs[key] = step14_research.build_graph(entry.config, bots, self.llm, self.checkpointer)
+                else:
+                    tools = await load_tools(entry.config.tools, entry.config, user=key or None)
+                    entry.graphs[key] = step9_agent.build_graph(entry.config, tools, self.llm, self.checkpointer)
+        return entry.graphs[key]
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from engine.llm import get_llm
+
+    if TOOL_THREADS:
+        from concurrent.futures import ThreadPoolExecutor
+        asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(TOOL_THREADS, thread_name_prefix="tool"))
+    app.state.auth = await AuthStore().open()
+    try:
+        async with postgres_checkpointer() as checkpointer:  # conversations (Lampus Phase 1, Step 4)
+            app.state.platform = Platform(checkpointer, get_llm())
+            app.state.platform.load_bots()
+            # Shared by every API copy through Redis (Lampus Phase 1, Step 7).
+            app.state.limiter = shared.RateLimiter()
+            app.state.login_limiter = shared.FailureCounter(LOGIN_LIMIT, 60)
+            app.state.builds = await make_build_manager(app.state.platform, app.state.auth.pool)
+            # Idempotency keys (Step 10): a running claim older than the longest turn was abandoned.
+            app.state.idempotency = IdempotencyStore(app.state.auth.pool, TURN_TIMEOUT_S + 60)
+            removed = await app.state.idempotency.clean()
+            if removed:
+                log.info("deleted %d idempotency keys older than a day", removed)
+            # Background tasks: serve bots other copies saved, and (unless a separate
+            # worker process does it) run queued builds in this process.
+            stop = asyncio.Event()
+            tasks = [asyncio.create_task(serve_new_bots(app.state.platform, stop))]
+            if RUN_WORKER:
+                from engine.worker import work, worker_name
+                manager = app.state.builds
+                tasks.append(asyncio.create_task(work(manager.store, lambda: manager.make_graph(),
+                                                      worker_name() + ":api", stop)))
+                tasks.append(asyncio.create_task(webhooks.deliver_loop(worker_name() + ":api", stop)))
+            try:
+                yield
+            finally:
+                stop.set()
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+    finally:
+        await app.state.auth.close()
+
+
+async def make_build_manager(platform: Platform, pool) -> BuildManager:
+    from engine.llm import get_llm
+    from engine.step10_builder import BUILDER_MODEL, build_builder
+
+    def bot_exists(bot_id: str) -> bool:
+        return bot_id in platform.bots
+
+    # The builder pauses for review in the shared Postgres checkpointer, so this copy
+    # can resume a graph a worker started (Lampus Phase 1, Step 8).
+    manager = BuildManager(BuildStore(pool),
+                           lambda: build_builder(get_llm(model=BUILDER_MODEL), platform.checkpointer),
+                           bot_exists, platform.add_bot)
+    removed = await manager.clean_orphans()
+    if removed:
+        log.info("deleted uploads of builds that will never finish: %s", ", ".join(removed))
+    return manager
+
+
+async def serve_new_bots(platform: Platform, stop: asyncio.Event) -> None:
+    """When any copy saves a new bot, every copy starts serving it (Redis pub/sub)."""
+    while not stop.is_set():
+        listener = None
+        try:
+            listener = await shared.subscribe("bots")
+            while not stop.is_set():
+                message = await listener.get_message(timeout=1)
+                if message:
+                    bot_id = json.loads(message["data"]).get("saved")
+                    if bot_id and bot_id not in platform.bots:
+                        platform.add_bot(bot_id)
+                        log.info("now serving %s, saved by another copy", bot_id)
+        except Exception as e:  # noqa: BLE001 - Redis away: try again shortly
+            log.warning("bot announcements unavailable: %s", e)
+            await asyncio.sleep(2)
+        finally:
+            if listener is not None:
+                await listener.aclose()
+
+
+app = FastAPI(title="Agentic RAG bots", version="0.16.0", lifespan=lifespan)
+# No allow_credentials: a cross-origin page can never send the session cookie.
+app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_methods=["GET", "POST"],
+                   allow_headers=["Content-Type", "Idempotency-Key"])
+# Every route except /health; mounted under /v1, and at the old paths, at the end of this file.
+router = APIRouter()
+API_VERSION_PREFIX = "/v1"
+UNVERSIONED = {"/health", "/docs", "/openapi.json", "/redoc"}
+
+
+@app.middleware("http")
+async def mark_unversioned_paths(request: Request, call_next):
+    """The old paths without /v1 still work, but say so (Deprecation header, RFC 9745)."""
+    response = await call_next(request)
+    path = request.url.path
+    if not path.startswith(API_VERSION_PREFIX + "/") and path not in UNVERSIONED:
+        response.headers["Deprecation"] = "true"
+        response.headers["Link"] = f'<{API_VERSION_PREFIX}{path}>; rel="successor-version"'
+    return response
+
+
+# ------------------------------------------------------------------ request and response shapes
+
+class BotPublic(BaseModel):
+    """What a client may know about a bot. The system prompt and tool setup stay on the server."""
+    id: str
+    name: str
+    description: str
+    welcome: str
+    suggested_questions: list[str]
+    topics: list[str]
+    theme: Theme
+
+
+class LoginIn(BaseModel):
+    username: str = Field(max_length=64)
+    password: str = Field(max_length=200)
+
+
+class MessageIn(BaseModel):
+    text: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
+
+
+class ApprovalIn(BaseModel):
+    decision: Literal["approve", "reject"]
+
+
+class DecisionIn(BaseModel):
+    decision: Literal["approve", "reject"]
+
+
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    text: str
+    sources: list[str] = []  # for an answer: what its turn retrieved
+
+
+class ThreadOut(BaseModel):
+    thread_id: str
+    messages: list[ChatMessage]
+    pending_approval: dict | None = None
+
+
+# ------------------------------------------------------------------ who is asking, and may they
+
+def client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
+
+
+async def current_user(request: Request) -> User:
+    user = await request.app.state.auth.user_for_session(request.cookies.get(COOKIE_NAME))
+    if user is None:
+        raise HTTPException(401, "Please sign in.")
+    return user
+
+
+async def admin_user(user: User = Depends(current_user)) -> User:
+    if not user.is_admin:
+        raise HTTPException(403, "Only admins can do this.")
+    return user
+
+
+async def bot_for(request: Request, user: User, bot_id: str) -> BotEntry:
+    """The bot, if this user may use it. Otherwise 404, the same as for a bot that does not exist."""
+    auth = request.app.state.auth
+    entry = request.app.state.platform.bots.get(bot_id)
+    if entry is not None and await auth.can_use(user, bot_id):
+        return entry
+    if entry is not None:
+        await auth.audit(user.username, "access.denied", bot_id=bot_id,
+                         detail={"reason": "bot not granted"}, ip=client_ip(request))
+    raise HTTPException(404, f"No bot '{bot_id}'")
+
+
+async def own_thread(request: Request, user: User, bot_id: str, thread_id: str):
+    """Only the user who started a conversation may read or continue it."""
+    if not THREAD_PATTERN.fullmatch(thread_id):
+        raise HTTPException(404, "No such conversation")
+    owns = await request.app.state.auth.owns_thread(user, bot_id, thread_id)
+    if owns:
+        return
+    if owns is False:  # it exists, but is someone else's (or another bot's)
+        await request.app.state.auth.audit(user.username, "access.denied", bot_id=bot_id, thread_id=thread_id,
+                                           detail={"reason": "not the owner"}, ip=client_ip(request))
+    raise HTTPException(404, "No such conversation")
+
+
+async def config_for(request: Request, user: User, entry: BotEntry, thread_id: str) -> dict:
+    """The graph config for this user's turn. A research bot gets the sources this user may read,
+    so its agents act with the user's permissions, never more (Step 14)."""
+    config = step9_agent.turn_config(entry.config, thread_id)
+    if entry.config.research:
+        auth = request.app.state.auth
+        allowed = [s for s in entry.config.research.sources if await auth.can_use(user, s)]
+        config["configurable"] = {**config["configurable"], "allowed_sources": allowed}
+    return config
+
+
+async def rate_limit(request: Request, user: User, bot_id: str):
+    # Two token buckets: the student's own, and the bot's (a school's tutor), so one
+    # busy school can't use up the capacity every other school shares.
+    wait = await request.app.state.limiter.take({f"student:{user.username}": (RATE_LIMIT, RATE_LIMIT),
+                                                 f"bot:{bot_id}": (BOT_RATE_LIMIT, BOT_RATE_LIMIT)})
+    if wait:
+        raise HTTPException(429, "Too many messages; slow down.", headers={"Retry-After": str(wait)})
+
+
+async def check_quota(request: Request, user: User, bot_id: str):
+    problem = await request.app.state.auth.over_quota(user.username)
+    if problem:
+        await request.app.state.auth.audit(user.username, "quota.exceeded", bot_id=bot_id, ip=client_ip(request))
+        raise HTTPException(429, problem)
+
+
+async def conversation_lock(bot_id: str, thread_id: str):
+    """One turn at a time per conversation, across every API copy (a lock in Redis).
+
+    Two turns writing one conversation at once would interleave its checkpoints.
+    Returns the function that frees the lock; raises 409 if another turn holds it.
+
+    The lock lasts LOCK_TTL_S and is renewed every third of that while the turn
+    runs. If this copy crashes, renewal stops and the conversation is free again
+    within LOCK_TTL_S. (Until Phase 1, Step 9 the lock simply lasted as long as the
+    longest turn, 3 minutes: after a crash, every student whose conversation was on
+    that copy got 409s for up to 3 minutes.) Renewal itself stops after the longest
+    a turn may take, so a lock whose release was missed can't live on forever.
+    """
+    name = f"thread:{bot_id}:{thread_id}"
+    token = await shared.acquire_lock(name, LOCK_TTL_S)
+    if token is None:
+        raise HTTPException(409, "A reply in this conversation is still being written.")
+
+    async def renew():
+        deadline = time.monotonic() + TURN_TIMEOUT_S + 60
+        while time.monotonic() < deadline:
+            await asyncio.sleep(LOCK_TTL_S / 3)
+            try:
+                if not await shared.extend_lock(name, token, LOCK_TTL_S):
+                    log.error("lost the lock on %s", name)
+                    return
+            except Exception as e:  # noqa: BLE001 - Redis away: try again next time
+                log.warning("could not renew %s: %s", name, e)
+
+    renewing = asyncio.create_task(renew())
+
+    async def release():
+        renewing.cancel()
+        try:
+            await shared.release_lock(name, token)
+        except Exception as e:  # noqa: BLE001 - the lock still expires by itself
+            log.error("could not release %s: %s", name, e)
+
+    return release
+
+
+# ------------------------------------------------------------------ streaming a turn
+
+async def pending_approval(graph, config) -> dict | None:
+    snapshot = await graph.aget_state(config, subgraphs=True)
+    interrupts = list(snapshot.interrupts) + [i for t in snapshot.tasks for i in t.interrupts]
+    return interrupts[0].value if interrupts else None
+
+
+def sources_in(messages) -> list[str]:
+    found = {s.strip() for m in messages if isinstance(m, ToolMessage) and m.name in SOURCE_TOOLS
+             for s in SOURCE_PATTERN.findall(m.text)}
+    # A research answer carries its sources itself (Step 14: the writer never calls tools).
+    for m in messages:
+        if isinstance(m, AIMessage):
+            found.update(m.response_metadata.get("sources", []))
+    return sorted(found)
+
+
+def event(name: str, data: dict) -> ServerSentEvent:
+    return ServerSentEvent(event=name, data=json.dumps(data, ensure_ascii=False))
+
+
+def describe(node: str, update) -> list[ServerSentEvent]:
+    """Turn a graph step into progress events. Internal details (prompts, raw tool output) stay out."""
+    update = update or {}
+    if node == "guard_input" and update.get("guard"):
+        return [event("status", {"stage": "guard", "result": update["guard"].split(":")[0]})]
+    if node == "start_turn" and update.get("messages"):
+        return [event("status", {"stage": "compact", "removed": len(update["messages"])})]
+    if node == "agent":
+        last = (update.get("messages") or [None])[-1]
+        if isinstance(last, AIMessage) and last.tool_calls:
+            return [event("status", {"stage": "tool_call", "name": c["name"], "args": c["args"]})
+                    for c in last.tool_calls]
+    if node == "tools":
+        return [event("status", {"stage": "tool_result", "name": m.name})
+                for m in update.get("messages", []) if isinstance(m, ToolMessage)]
+    if node == "check_answer":
+        return [event("status", {"stage": "fact_check",
+                                 "result": "revising" if update.get("feedback") else "supported"})]
+    if node == "guard_output" and update.get("guard"):
+        return [event("status", {"stage": "output_guard", "result": "blocked"})]
+    # Step 14: the research team
+    if node == "plan" and update.get("tasks"):
+        return [event("status", {"stage": "plan", "tasks": [{"question": t["question"], "source": t["source_name"]}
+                                                            for t in update["tasks"]]})]
+    if node == "research" and update.get("findings"):
+        f = update["findings"][0]
+        return [event("status", {"stage": "research", "question": f["question"], "source": f["source_name"],
+                                 "found": f["answered"]})]
+    if node == "review" and "rounds" in update:
+        result = "more_research" if update.get("tasks") else "rewrite" if "feedback" in update else "approved"
+        return [event("status", {"stage": "review", "result": result})]
+    return []
+
+
+async def final_event(graph, config) -> ServerSentEvent:
+    state = (await graph.aget_state(config)).values
+    turn = current_turn(state["messages"])
+    answer = next((m.text for m in reversed(turn) if isinstance(m, AIMessage) and not m.tool_calls), "")
+    sources = sources_in(turn)
+    return event("done", {"answer": answer, "sources": sources,
+                          "guard": (state.get("guard") or "ok").split(":")[0]})
+
+
+async def stream_turn(graph, config, graph_input, release, on_end):
+    """Run one turn (or the rest of a paused one) and yield its events.
+
+    The caller holds the conversation's lock; release() frees it when the turn
+    ends. on_end(tokens, result) runs however the turn ends, to record usage and audit it.
+    """
+    usage = UsageMetadataCallbackHandler()  # counts tokens of every model call in the turn
+    config = {**config, "callbacks": [usage]}
+    result = "done"
+    try:
+        try:
+            # Sent at once: the input check alone takes 1-7 s, and silence feels like a hang.
+            yield event("status", {"stage": "received"})
+            interrupted = None
+            try:
+                async with asyncio.timeout(TURN_TIMEOUT_S):
+                    async for _ns, mode, data in graph.astream(graph_input, config, subgraphs=True,
+                                                               stream_mode=["updates", "messages"]):
+                        if mode == "messages":
+                            chunk, meta = data
+                            # Only the answering model; not the guard, grader or fact checker.
+                            if meta.get("langgraph_node") in ANSWER_NODES and isinstance(chunk, AIMessageChunk) \
+                                    and chunk.text:
+                                yield event("token", {"message_id": chunk.id, "text": chunk.text})
+                            continue
+                        for node, update in data.items():
+                            if node == "__interrupt__":
+                                interrupted = update[0].value
+                            else:
+                                for e in describe(node, update):
+                                    yield e
+            except asyncio.CancelledError:
+                # The client went away mid-turn. Leave the conversation valid, then stop.
+                result = "cancelled"
+                await asyncio.shield(step9_agent.recover(graph, config, ConnectionAbortedError("client left")))
+                raise
+            except Exception as e:  # noqa: BLE001 - timeout, model down, step limit: repair and report
+                log.warning("turn failed: %s: %s", type(e).__name__, e)
+                result = f"error: {type(e).__name__}"
+                await step9_agent.recover(graph, config, e)
+                yield event("error", {"type": type(e).__name__})
+            if interrupted is not None:
+                result = "approval"
+                yield event("approval", {"tool_calls": [{"id": c["id"], "name": c["name"], "args": c["args"]}
+                                                        for c in interrupted["tool_calls"]]})
+                return
+            yield await final_event(graph, config)
+        finally:
+            tokens = sum(u.get("total_tokens", 0) for u in usage.usage_metadata.values())
+            try:
+                await asyncio.shield(on_end(tokens, result))
+            except Exception as e:  # noqa: BLE001 - bookkeeping must never break the reply
+                log.error("could not record the turn: %s", e)
+    finally:
+        await asyncio.shield(release())
+
+
+IDEMPOTENCY_KEY = re.compile(r"^[A-Za-z0-9_\-:.]{8,128}$")
+
+
+async def claim_idempotency_key(request: Request, user: User, *request_parts) -> tuple[str | None, dict | None]:
+    """(key, None): go ahead, this request owns the key (or has none). (key, stored): play it back."""
+    key = request.headers.get("idempotency-key")
+    if key is None:
+        return None, None
+    if not IDEMPOTENCY_KEY.match(key):
+        raise HTTPException(400, "Idempotency-Key: 8-128 letters, digits, '-', '_', ':' or '.'.")
+    try:
+        return key, await request.app.state.idempotency.claim(user.username, key, request_hash(*request_parts))
+    except KeyInUse:
+        raise HTTPException(409, "This request is still being answered. Try again shortly.",
+                            headers={"Retry-After": "5"}) from None
+    except KeyReused:
+        raise HTTPException(422, "This Idempotency-Key was already used for a different request.") from None
+
+
+async def remember_reply(stream, store: IdempotencyStore, username: str, key: str):
+    """Pass a turn's events on, and store its final event under the key; if it fails, give the key back."""
+    last, finished = None, False
+    try:
+        async for e in stream:
+            last = e
+            yield e
+        finished = True
+    finally:
+        if finished and last is not None and last.event in ("done", "approval"):
+            await asyncio.shield(store.finish(username, key, {"event": last.event, "data": last.data}))
+        else:
+            await asyncio.shield(store.release(username, key))
+
+
+async def replay_reply(stored: dict):
+    yield event("status", {"stage": "received"})
+    yield ServerSentEvent(event=stored["event"], data=stored["data"])
+
+
+def turn_recorder(request: Request, user: User, graph, config, bot_id: str, thread_id: str):
+    auth = request.app.state.auth
+
+    async def on_end(tokens: int, result: str):
+        state = (await graph.aget_state(config)).values
+        guard = (state.get("guard") or "ok").split(":")[0]
+        await auth.add_usage(user.username, turns=0, tokens=tokens)
+        # Who, what and how much; never the message text.
+        await auth.audit(user.username, "turn.end", bot_id=bot_id, thread_id=thread_id, ip=client_ip(request),
+                         detail={"result": result, "tokens": tokens, "guard": guard})
+        if guard == "crisis":  # the school's counsellor system hears of it at once (ids only)
+            await webhooks.emit("conversation.flagged", {"bot_id": bot_id, "thread_id": thread_id,
+                                                         "username": user.username, "reason": "crisis"})
+
+    return on_end
+
+
+# ------------------------------------------------------------------ routes: sign-in
+
+@router.post("/auth/login")
+async def login(request: Request, response: Response, body: LoginIn):
+    auth, ip = request.app.state.auth, client_ip(request)
+    limiter, key = request.app.state.login_limiter, f"{ip}|{body.username}"
+    wait = await limiter.retry_after(key)  # only failures count, so signing in often is fine
+    if wait:  # slows down password guessing
+        await auth.audit(body.username[:64], "auth.login_blocked", ip=ip)
+        raise HTTPException(429, "Too many sign-in attempts. Try again in a minute.",
+                            headers={"Retry-After": str(wait)})
+    user = await auth.authenticate(body.username, body.password)
+    if user is None:
+        await limiter.failed(key)
+        await auth.audit(body.username[:64], "auth.login_failed", ip=ip)
+        raise HTTPException(401, "Wrong username or password.")  # never says which one
+    token = await auth.start_session(user.username)
+    response.set_cookie(COOKIE_NAME, token, max_age=SESSION_TTL_S, httponly=True, samesite="strict",
+                        secure=COOKIE_SECURE, path="/")
+    await auth.audit(user.username, "auth.login", ip=ip)
+    return {"username": user.username, "role": user.role, "usage": await auth.usage_today(user.username)}
+
+
+@router.post("/auth/logout", status_code=204)
+async def logout(request: Request, response: Response, user: User = Depends(current_user)):
+    await request.app.state.auth.end_session(request.cookies[COOKIE_NAME])
+    response.delete_cookie(COOKIE_NAME, path="/")
+    await request.app.state.auth.audit(user.username, "auth.logout", ip=client_ip(request))
+
+
+@router.get("/auth/me")
+async def me(request: Request, user: User = Depends(current_user)):
+    return {"username": user.username, "role": user.role,
+            "usage": await request.app.state.auth.usage_today(user.username)}
+
+
+# ------------------------------------------------------------------ routes: bots and conversations
+
+@app.get("/health")
+async def health(request: Request):
+    return {"status": "ok", "bots": len(request.app.state.platform.bots)}
+
+
+@router.get("/bots", response_model=list[BotPublic])
+async def list_bots(request: Request, user: User = Depends(current_user)):
+    auth = request.app.state.auth
+    return [BotPublic(**e.config.model_dump()) for bot_id, e in request.app.state.platform.bots.items()
+            if await auth.can_use(user, bot_id)]
+
+
+@router.get("/bots/{bot_id}", response_model=BotPublic)
+async def get_bot_info(request: Request, bot_id: str, user: User = Depends(current_user)):
+    return BotPublic(**(await bot_for(request, user, bot_id)).config.model_dump())
+
+
+@router.get("/bots/{bot_id}/threads")
+async def list_threads(request: Request, bot_id: str, user: User = Depends(current_user)):
+    await bot_for(request, user, bot_id)
+    return await request.app.state.auth.threads_for(user.username, bot_id)
+
+
+@router.post("/bots/{bot_id}/threads", status_code=201)
+async def new_thread(request: Request, response: Response, bot_id: str, user: User = Depends(current_user)):
+    entry = await bot_for(request, user, bot_id)
+    key, stored = await claim_idempotency_key(request, user, "new_thread", bot_id)
+    if stored is not None:  # a resend: the conversation already exists
+        response.headers["Idempotent-Replayed"] = "true"
+        return stored
+    try:
+        thread_id = uuid.uuid4().hex
+        await request.app.state.auth.add_thread(thread_id, bot_id, user.username)
+    except BaseException:
+        if key:
+            await request.app.state.idempotency.release(user.username, key)
+        raise
+    result = {"thread_id": thread_id, "welcome": entry.config.welcome}
+    if key:
+        await request.app.state.idempotency.finish(user.username, key, result)
+    return result
+
+
+@router.get("/bots/{bot_id}/threads/{thread_id}", response_model=ThreadOut)
+async def get_thread(request: Request, bot_id: str, thread_id: str, user: User = Depends(current_user)):
+    entry = await bot_for(request, user, bot_id)
+    await own_thread(request, user, bot_id, thread_id)
+    graph = await request.app.state.platform.graph_for(entry, user)
+    config = await config_for(request, user, entry, thread_id)
+    state = (await graph.aget_state(config)).values
+    messages, turn = [], []  # turn: the tool results since the last user message
+    for m in state.get("messages", []):
+        if isinstance(m, HumanMessage):
+            messages.append(ChatMessage(role="user", text=m.text))
+            turn = []
+        elif isinstance(m, ToolMessage):
+            turn.append(m)
+        elif isinstance(m, AIMessage) and not m.tool_calls and m.text:
+            messages.append(ChatMessage(role="assistant", text=m.text, sources=sources_in(turn + [m])))
+    return ThreadOut(thread_id=thread_id, messages=messages,
+                     pending_approval=await pending_approval(graph, config))
+
+
+@router.post("/bots/{bot_id}/threads/{thread_id}/messages")
+async def send_message(request: Request, bot_id: str, thread_id: str, body: MessageIn,
+                       user: User = Depends(current_user)):
+    entry, platform, auth = await bot_for(request, user, bot_id), request.app.state.platform, request.app.state.auth
+    await own_thread(request, user, bot_id, thread_id)
+    # A resend of a message that was already answered gets the same answer back, and is
+    # not run, charged or added to the conversation again (Step 10).
+    key, stored = await claim_idempotency_key(request, user, "message", bot_id, thread_id, body.text)
+    if stored is not None:
+        return EventSourceResponse(replay_reply(stored), headers={"Idempotent-Replayed": "true"})
+    try:
+        await rate_limit(request, user, bot_id)
+        await check_quota(request, user, bot_id)
+        graph = await platform.graph_for(entry, user)
+        config = await config_for(request, user, entry, thread_id)
+        release = await conversation_lock(bot_id, thread_id)
+    except BaseException:
+        if key:
+            await request.app.state.idempotency.release(user.username, key)
+        raise
+    try:
+        if await pending_approval(graph, config):
+            raise HTTPException(409, "This conversation is waiting for an approval decision.")
+        # Counted when it starts, in one conditional write, so parallel conversations
+        # cannot overrun the turn quota (check_quota above is only the early, cheap check).
+        problem = await auth.reserve_turn(user.username)
+        if problem:
+            await auth.audit(user.username, "quota.exceeded", bot_id=bot_id, ip=client_ip(request))
+            raise HTTPException(429, problem)
+    except BaseException:
+        await release()
+        if key:
+            await request.app.state.idempotency.release(user.username, key)
+        raise
+    await auth.audit(user.username, "turn.start", bot_id=bot_id, thread_id=thread_id, ip=client_ip(request),
+                     detail={"chars": len(body.text)})
+    graph_input = {"messages": [HumanMessage(body.text)]}
+    on_end = turn_recorder(request, user, graph, config, bot_id, thread_id)
+    stream = stream_turn(graph, config, graph_input, release, on_end)
+    if key:
+        stream = remember_reply(stream, request.app.state.idempotency, user.username, key)
+    return EventSourceResponse(stream, ping=15)
+
+
+@router.post("/bots/{bot_id}/threads/{thread_id}/approval")
+async def send_approval(request: Request, bot_id: str, thread_id: str, body: ApprovalIn,
+                        user: User = Depends(current_user)):
+    entry, platform, auth = await bot_for(request, user, bot_id), request.app.state.platform, request.app.state.auth
+    await own_thread(request, user, bot_id, thread_id)
+    await rate_limit(request, user, bot_id)
+    graph = await platform.graph_for(entry, user)
+    config = await config_for(request, user, entry, thread_id)
+    release = await conversation_lock(bot_id, thread_id)
+    waiting = await pending_approval(graph, config)
+    if not waiting:
+        await release()
+        raise HTTPException(409, "Nothing in this conversation is waiting for approval.")
+    # Who approved what: the tools and the decision (the arguments are the user's own data).
+    await auth.audit(user.username, "approval.decision", bot_id=bot_id, thread_id=thread_id,
+                     ip=client_ip(request), detail={"decision": body.decision,
+                                                    "tools": [c["name"] for c in waiting["tool_calls"]]})
+    on_end = turn_recorder(request, user, graph, config, bot_id, thread_id)
+    return EventSourceResponse(stream_turn(graph, config, Command(resume=body.decision), release, on_end),
+                               ping=15)
+
+
+# ------------------------------------------------------------------ routes: admin
+
+@router.get("/admin/audit")
+async def audit_log(request: Request, limit: int = 50, user: User = Depends(admin_user)):
+    auth = request.app.state.auth
+    intact, rows, broken_at = await auth.verify_audit()
+    return {"chain": {"intact": intact, "rows": rows, "broken_at": broken_at},
+            "entries": await auth.audit_entries(min(max(limit, 1), 500))}
+
+
+# ------------------------------------------------------------------ routes: building bots (Step 15)
+
+async def build_for(request: Request, build_id: str) -> dict:
+    row = await request.app.state.builds.store.get(build_id)
+    if row is None:
+        raise HTTPException(404, "No such build")
+    return row
+
+
+@router.post("/admin/builds", status_code=201)
+async def start_build(request: Request, user: User = Depends(admin_user)):
+    # The form is read here, after the admin check, so nobody else can make the server
+    # store large uploads. The declared size is checked before a byte is read.
+    builds: BuildManager = request.app.state.builds
+    if int(request.headers.get("content-length") or 0) > MAX_TOTAL_BYTES + 2**20:
+        raise HTTPException(413, f"The upload is larger than {MAX_TOTAL_BYTES // 2**20} MB.")
+    async with request.form(max_files=MAX_FILES + 1, max_fields=10) as form:
+        bot_id, use_case = str(form.get("bot_id") or "").strip(), str(form.get("use_case") or "")
+        uploads = [f for f in form.getlist("files") if isinstance(f, UploadFile)]
+        try:
+            await builds.check_request(bot_id, use_case)
+            # Read at most one byte over the limit: enough to know a file is too large.
+            files = [(f.filename or "file", await f.read(MAX_FILE_BYTES + 1)) for f in uploads]
+            folder, names = builds.store_files(bot_id, files)
+        except UploadProblem as e:
+            raise HTTPException(400, str(e)) from None
+    # Queued for a worker (Step 8): several builds may wait; each worker runs one at a time.
+    build = await builds.start(bot_id, use_case, folder, names, by=user.username)
+    await request.app.state.auth.audit(user.username, "build.start", bot_id=bot_id, ip=client_ip(request),
+                                       detail={"build": build["id"], "files": len(names),
+                                               "bytes": sum(len(d) for _, d in files)})
+    return build
+
+
+@router.get("/admin/builds")
+async def list_builds(request: Request, user: User = Depends(admin_user)):
+    from engine.builds import _summary
+    return [_summary(row) for row in await request.app.state.builds.store.recent()]
+
+
+@router.get("/admin/builds/{build_id}")
+async def get_build(request: Request, build_id: str, user: User = Depends(admin_user)):
+    return await detail(request.app.state.builds.store, await build_for(request, build_id))
+
+
+@router.get("/admin/builds/{build_id}/events")
+async def build_events(request: Request, build_id: str, after: int = 0, user: User = Depends(admin_user)):
+    await build_for(request, build_id)
+    # EventSource reconnects by itself and sends the last id it saw: continue from there.
+    last = request.headers.get("last-event-id")
+    after = int(last) if last and last.isdigit() else max(after, 0)
+    builds: BuildManager = request.app.state.builds
+
+    async def events():
+        async for e in builds.follow(build_id, after):
+            yield ServerSentEvent(id=str(e["n"]), event="build", data=json.dumps(e, ensure_ascii=False))
+        yield ServerSentEvent(event="end", data=json.dumps({"status": (await builds.store.get(build_id))["status"]}))
+
+    return EventSourceResponse(events(), ping=15)
+
+
+@router.post("/admin/builds/{build_id}/decision")
+async def decide_build(request: Request, build_id: str, body: DecisionIn, user: User = Depends(admin_user)):
+    row = await build_for(request, build_id)
+    try:
+        row = await request.app.state.builds.decide(build_id, body.decision)
+    except UploadProblem as e:
+        raise HTTPException(409, str(e)) from None
+    await request.app.state.auth.audit(user.username, "build.decision", bot_id=row["bot_id"], ip=client_ip(request),
+                                       detail={"build": build_id, "decision": body.decision,
+                                               "result": row["status"]})
+    return await detail(request.app.state.builds.store, row)
+
+
+# ------------------------------------------------------------------ routes: error analysis (Step 17)
+# A domain expert labels a bot's conversations here; the LLM steps run from analysis.py.
+
+class LabelIn(BaseModel):
+    verdict: Literal["pass", "fail"]
+    note: str = Field("", max_length=analysis.MAX_NOTE)
+    first_failure: Literal[analysis.STEPS] | None = None
+
+
+class ModesIn(BaseModel):
+    modes: list[str] = Field(default_factory=list, max_length=10)
+
+
+def workspace_for(bot_id: str) -> analysis.Workspace:
+    try:
+        ws = analysis.Workspace(bot_id)
+    except ValueError:
+        raise HTTPException(404, "No analysis for this bot") from None
+    if not ws.exists():
+        raise HTTPException(404, "No analysis for this bot")
+    return ws
+
+
+@router.get("/admin/analysis")
+async def list_analyses(user: User = Depends(admin_user)):
+    return [ws.summary() for ws in analysis.workspaces()]
+
+
+@router.get("/admin/analysis/{bot_id}")
+async def get_analysis(bot_id: str, user: User = Depends(admin_user)):
+    return workspace_for(bot_id).detail()
+
+
+@router.put("/admin/analysis/{bot_id}/labels/{trace_id}")
+async def save_label(request: Request, bot_id: str, trace_id: str, body: LabelIn, user: User = Depends(admin_user)):
+    ws = workspace_for(bot_id)
+    try:
+        label = ws.save_label(trace_id, body.verdict, body.note, body.first_failure, by=user.username)
+    except KeyError:
+        raise HTTPException(404, "No such conversation") from None
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+    await request.app.state.auth.audit(user.username, "analysis.label", bot_id=bot_id, ip=client_ip(request),
+                                       detail={"trace": trace_id, "verdict": body.verdict})
+    return {"label": label, "summary": ws.summary(), "taxonomy": ws.taxonomy() or None}
+
+
+@router.put("/admin/analysis/{bot_id}/assignments/{trace_id}")
+async def assign_modes(request: Request, bot_id: str, trace_id: str, body: ModesIn,
+                       user: User = Depends(admin_user)):
+    ws = workspace_for(bot_id)
+    try:
+        taxonomy = ws.set_assignment(trace_id, body.modes)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+    await request.app.state.auth.audit(user.username, "analysis.assign", bot_id=bot_id, ip=client_ip(request),
+                                       detail={"trace": trace_id, "modes": body.modes})
+    return taxonomy
+
+
+@router.post("/admin/analysis/{bot_id}/taxonomy/approve")
+async def approve_taxonomy(request: Request, bot_id: str, user: User = Depends(admin_user)):
+    ws = workspace_for(bot_id)
+    try:
+        taxonomy = ws.approve_taxonomy(by=user.username)
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from None
+    await request.app.state.auth.audit(user.username, "analysis.approve", bot_id=bot_id, ip=client_ip(request),
+                                       detail={"modes": [m["id"] for m in taxonomy["modes"]]})
+    return taxonomy
+
+
+# The routes, under /v1 and (deprecated, kept for older clients) at their old paths.
+# Mounted last: include_router copies the routes defined so far.
+app.include_router(router, prefix=API_VERSION_PREFIX)
+app.include_router(router, include_in_schema=False)
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    logging.basicConfig(level=logging.INFO)
+    # Still localhost only: sessions travel in a cookie that needs HTTPS (API_COOKIE_SECURE=true)
+    # before this may listen on a network.
+    # On Windows, "none" makes uvicorn use the Selector loop engine.db asks for (uvicorn's
+    # own Windows default, Proactor, can't run psycopg in async mode). Linux keeps uvicorn's default.
+    # Behind nginx (Phase 1, Step 9) every request comes from nginx's address; the
+    # X-Forwarded-For header carries the student's, which the sign-in limiter needs.
+    # It is believed only from the addresses in FORWARDED_ALLOW_IPS (nginx's), or anyone
+    # could claim any address.
+    uvicorn.run(app, host="127.0.0.1", port=int(os.getenv("API_PORT", "8000")),
+                loop="none" if sys.platform == "win32" else "auto",
+                proxy_headers=True, forwarded_allow_ips=os.getenv("FORWARDED_ALLOW_IPS", "127.0.0.1"))

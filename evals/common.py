@@ -102,7 +102,7 @@ def get_judge_llm():
     limit (65,536 tokens, about USD 0.65 on Sonnet) on every request, although a
     verdict needs a few hundred. With little credit left, requests were refused.
     """
-    from llm import get_llm
+    from engine.llm import get_llm
 
     return get_llm(model=JUDGE_MODEL).model_copy(update={"max_tokens": 2000})
 

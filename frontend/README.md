@@ -4,7 +4,7 @@ A React, TypeScript and Vite app for the bots served by `../api.py`.
 
 ```bash
 # terminal 1, in the project root
-.\.venv\Scripts\python.exe api.py
+.\.venv\Scripts\python.exe -m engine.api
 
 # terminal 2, in this folder
 npm install

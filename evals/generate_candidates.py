@@ -43,7 +43,7 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
-    from retrieval import get_retriever
+    from engine.retrieval import get_retriever
 
     existing = yaml.safe_load(CANDIDATES_FILE.read_text(encoding="utf-8")) if CANDIDATES_FILE.exists() else []
     existing = existing or []

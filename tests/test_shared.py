@@ -1,0 +1,175 @@
+"""Lampus Phase 1, Step 7 - Shared state in Redis (course topics 8 and 3).
+
+    python -m unittest tests.test_shared -v        # needs Redis (REDIS_URL)
+
+Every API copy reads and writes the same Redis, so these checks stand in for
+"two copies at once": many concurrent requests against one bucket, one lock,
+one cache.
+"""
+
+import asyncio
+import secrets
+import sys
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import tests._env  # noqa: E402, F401  (unique REDIS_PREFIX)
+
+from engine import shared  # noqa: E402
+
+
+def run(coro):
+    return asyncio.run(coro)
+
+
+class TokenBucketTest(unittest.TestCase):
+    def setUp(self):
+        self.limiter = shared.RateLimiter()
+        self.student = f"student:{secrets.token_hex(3)}"
+        self.bot = f"bot:{secrets.token_hex(3)}"
+
+    def test_burst_then_refused(self):
+        async def go():
+            return [await self.limiter.take({self.student: (10, 10)}) for _ in range(11)]
+        waits = run(go())
+        self.assertEqual(waits[:10], [0] * 10)
+        self.assertGreaterEqual(waits[10], 1)  # 10 per minute: the next token in about 6 s
+        self.assertLessEqual(waits[10], 7)
+
+    def test_concurrent_requests_cannot_overdraw(self):
+        async def go():  # 50 requests at the same moment for 10 tokens
+            return await asyncio.gather(*(self.limiter.take({self.student: (10, 10)}) for _ in range(50)))
+        self.assertEqual(run(go()).count(0), 10)
+
+    def test_empty_bot_bucket_refuses_without_charging_the_student(self):
+        async def go():
+            for _ in range(2):
+                await self.limiter.take({self.bot: (2, 2)})  # the school uses up its bucket
+            refused = await self.limiter.take({self.student: (1, 1), self.bot: (2, 2)})
+            own = await self.limiter.take({self.student: (1, 1)})  # the student's token is still there
+            return refused, own
+        refused, own = run(go())
+        self.assertGreater(refused, 0)
+        self.assertEqual(own, 0)
+
+
+class FailureCounterTest(unittest.TestCase):
+    def test_blocked_after_limit(self):
+        counter, key = shared.FailureCounter(3, 60), f"1.2.3.4|{secrets.token_hex(3)}"
+
+        async def go():
+            before = await counter.retry_after(key)
+            for _ in range(3):
+                await counter.failed(key)
+            return before, await counter.retry_after(key)
+        before, after = run(go())
+        self.assertEqual(before, 0)
+        self.assertTrue(1 <= after <= 60)
+
+
+class LockTest(unittest.TestCase):
+    def test_one_holder_at_a_time(self):
+        name = f"thread:test:{secrets.token_hex(4)}"
+
+        async def go():
+            first = await shared.acquire_lock(name, 30)
+            second = await shared.acquire_lock(name, 30)
+            await shared.release_lock(name, "not-the-token")  # a stranger can't free it
+            still = await shared.is_locked(name)
+            await shared.release_lock(name, first)
+            third = await shared.acquire_lock(name, 30)
+            await shared.release_lock(name, third)
+            return first, second, still, third
+        first, second, still, third = run(go())
+        self.assertIsNotNone(first)
+        self.assertIsNone(second)
+        self.assertTrue(still)
+        self.assertIsNotNone(third)
+
+    def test_many_racers_one_winner(self):
+        name = f"thread:test:{secrets.token_hex(4)}"
+
+        async def go():
+            return await asyncio.gather(*(shared.acquire_lock(name, 30) for _ in range(20)))
+        self.assertEqual(sum(t is not None for t in run(go())), 1)
+
+    def test_renewed_lock_outlives_its_ttl_and_only_the_holder_renews(self):
+        name = f"thread:test:{secrets.token_hex(4)}"
+
+        async def go():
+            token = await shared.acquire_lock(name, 0.3)
+            stranger = await shared.extend_lock(name, "not-the-token", 30)
+            for _ in range(3):  # a turn that runs 0.6 s on a 0.3 s lock, renewing it
+                await asyncio.sleep(0.2)
+                await shared.extend_lock(name, token, 0.3)
+            held = await shared.is_locked(name)
+            await asyncio.sleep(0.4)  # the holder "crashes": no more renewals
+            return stranger, held, await shared.is_locked(name)
+        stranger, held, after_crash = run(go())
+        self.assertFalse(stranger)
+        self.assertTrue(held)
+        self.assertFalse(after_crash)
+
+    def test_lock_expires(self):
+        name = f"thread:test:{secrets.token_hex(4)}"
+
+        async def go():
+            await shared.acquire_lock(name, 0.2)  # a copy that crashed mid-turn
+            await asyncio.sleep(0.4)
+            return await shared.acquire_lock(name, 30)
+        self.assertIsNotNone(run(go()))
+
+
+class CacheTest(unittest.TestCase):
+    def test_shared_and_invalidated_per_collection(self):
+        a, b = f"col_a_{secrets.token_hex(3)}", f"col_b_{secrets.token_hex(3)}"
+        shared.cache_put(a, "what is x", "answer A")
+        shared.cache_put(b, "what is x", "answer B")
+        self.assertEqual(shared.cache_get(a, "what is x"), "answer A")
+        shared.invalidate(a)  # a's documents were re-ingested
+        self.assertIsNone(shared.cache_get(a, "what is x"))
+        self.assertEqual(shared.cache_get(b, "what is x"), "answer B")
+
+
+class QueueTest(unittest.TestCase):
+    def test_each_job_to_one_worker_and_taken_over_if_its_worker_dies(self):
+        queue = f"test_{secrets.token_hex(3)}"
+        old = shared.CLAIM_IDLE_MS
+        shared.CLAIM_IDLE_MS = 300  # take over jobs idle for 0.3 s (60 s in the app)
+
+        async def go():
+            await shared.enqueue(queue, {"build": "b1"})
+            first = await shared.next_job(queue, "worker-a", block_ms=500)
+            nothing = await shared.next_job(queue, "worker-b", block_ms=100)  # a's job is not given to b
+            await asyncio.sleep(0.4)  # worker a "dies": it never acknowledges
+            again = await shared.next_job(queue, "worker-b", block_ms=100)
+            await shared.ack_job(queue, again[0])
+            await asyncio.sleep(0.4)
+            after_ack = await shared.next_job(queue, "worker-c", block_ms=100)
+            return first, nothing, again, after_ack
+        try:
+            first, nothing, again, after_ack = run(go())
+        finally:
+            shared.CLAIM_IDLE_MS = old
+        self.assertEqual(first[1], {"build": "b1"})
+        self.assertIsNone(nothing)
+        self.assertEqual(again[0], first[0])  # the same job, now worker b's
+        self.assertIsNone(after_ack)          # acknowledged: never handed out again
+
+    def test_pubsub_reaches_every_subscriber(self):
+        name = f"test:{secrets.token_hex(3)}"
+
+        async def go():
+            listeners = [await shared.subscribe(name) for _ in range(2)]
+            await shared.publish(name, {"saved": "new_bot"})
+            got = []
+            for listener in listeners:
+                got.append(await listener.get_message(timeout=2))
+                await listener.aclose()
+            return got
+        self.assertEqual([m["data"] for m in run(go())], ['{"saved": "new_bot"}'] * 2)
+
+
+if __name__ == "__main__":
+    unittest.main()

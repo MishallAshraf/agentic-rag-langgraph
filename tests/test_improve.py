@@ -21,10 +21,10 @@ import yaml  # noqa: E402
 from langgraph.checkpoint.memory import InMemorySaver  # noqa: E402
 from langgraph.types import Command  # noqa: E402
 
-import improve  # noqa: E402
-import step10_builder  # noqa: E402
-from bot_config import ROOT, BotConfig, load_bot, rule_problems  # noqa: E402
-from improve import (ArchitectReview, Attack, AttackPlan, Fix, ResearchNote, Verdict)  # noqa: E402
+from engine import improve  # noqa: E402
+from engine import step10_builder  # noqa: E402
+from engine.bot_config import ROOT, BotConfig, load_bot, rule_problems  # noqa: E402
+from engine.improve import (ArchitectReview, Attack, AttackPlan, Fix, ResearchNote, Verdict)  # noqa: E402
 
 WORK = ROOT / "data" / "test_improve"  # inside the project, as bot files must be (data/ is gitignored)
 GOOD_RULE = "Never promise discounts or free items; explain the written policy and offer to pass it to the manager."

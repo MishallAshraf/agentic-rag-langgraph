@@ -1,7 +1,8 @@
 // The Step 11 API, typed. Everything the server sends is data to display,
 // never HTML to inject: React escapes it, so a model reply cannot run script.
 
-const BASE = '/api' // forwarded to the Python server by Vite (vite.config.ts)
+// Forwarded to the Python server by Vite (vite.config.ts); the API's version 1 (Lampus Phase 1, Step 10).
+const BASE = '/api/v1'
 
 /** Replay build (npm run build:demo): recorded answers instead of the server. */
 export const REPLAY = import.meta.env.VITE_REPLAY === '1'
@@ -83,10 +84,12 @@ export async function getThread(botId: string, threadId: string): Promise<Thread
  * lines starting with ":" are keep-alive comments.
  */
 async function streamPost(path: string, body: object, onEvent: (e: TurnEvent) => void,
-                          signal?: AbortSignal): Promise<void> {
+                          signal?: AbortSignal, idempotencyKey?: string): Promise<void> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'text/event-stream' }
+  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey
   const res = await check(await fetch(`${BASE}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+    headers,
     body: JSON.stringify(body),
     signal,
   }))
@@ -114,7 +117,10 @@ async function streamPost(path: string, body: object, onEvent: (e: TurnEvent) =>
 export async function sendMessage(botId: string, threadId: string, text: string,
                             onEvent: (e: TurnEvent) => void, signal?: AbortSignal) {
   if (REPLAY) return (await replay()).sendMessage(botId, threadId, text, onEvent, signal)
-  return streamPost(`/bots/${botId}/threads/${threadId}/messages`, { text }, onEvent, signal)
+  // A new key for each message the student sends. Sending it again with the same key
+  // would get the stored answer back instead of a second turn (engine/idempotency.py).
+  return streamPost(`/bots/${botId}/threads/${threadId}/messages`, { text }, onEvent, signal,
+                    crypto.randomUUID())
 }
 
 export async function sendApproval(botId: string, threadId: string, decision: 'approve' | 'reject',

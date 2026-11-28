@@ -36,6 +36,7 @@ An ADR records one significant decision: the context, what was decided, the alte
 | [0030](0030-build-queue-and-worker.md) | Bot builds through a Redis Streams queue to a separate worker; progress in Postgres, pub/sub to notify | Accepted |
 | [0031](0031-scale-out-nginx-and-read-replica.md) | Three API copies behind nginx, a read replica for searches, renewed 15 s conversation locks; a hang under load fixed | Accepted |
 | [0032](0032-api-v1-idempotency-and-signed-webhooks.md) | The API under /v1, idempotency keys for resent requests, signed webhooks to schools (Standard Webhooks) | Accepted |
+| [0033](0033-textbook-ingestion-printed-pages-and-structure.md) | The tutor's textbook: text and math from the web pages, printed pages from the PDF, chunks cut by the book's structure; answer key never searched | Accepted |
 
 Statuses: **Proposed** (under discussion), **Accepted**, **Superseded by NNNN** (replaced by a later decision; the old record is kept, not edited).
 

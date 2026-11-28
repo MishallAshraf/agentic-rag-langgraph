@@ -1,0 +1,30 @@
+{"id": "q01", "question": "If two friends share a pizza equally, how much does each one get?", "phrase": "Andy and Bobby love pizza", "kind": "paraphrase"}
+{"id": "q02", "question": "How do I convert an improper fraction to a mixed number?", "phrase": "we converted the improper fraction", "kind": "term"}
+{"id": "q03", "question": "How do I find fractions that are equivalent to 1/2?", "phrase": "many fractions equivalent to", "kind": "term"}
+{"id": "q04", "question": "How do I put fractions in order using the greater than and less than signs?", "phrase": "can use the inequality symbols to order fractions", "kind": "paraphrase"}
+{"id": "q05", "question": "How do I simplify a fraction like 10/15?", "phrase": "simplify the fraction, we look for any common factors", "kind": "term"}
+{"id": "q06", "question": "What is a reciprocal?", "phrase": "are related to each other in a special way", "kind": "term"}
+{"id": "q07", "question": "What is a complex fraction?", "phrase": "Another kind of fraction is called complex", "kind": "term"}
+{"id": "q08", "question": "Where should the minus sign go in a negative fraction?", "phrase": "the negative sign is placed in front of the fraction", "kind": "paraphrase"}
+{"id": "q09", "question": "How do I add fractions that have the same bottom number?", "phrase": "just add the number of pieces", "kind": "paraphrase"}
+{"id": "q10", "question": "How do I add fractions with different denominators?", "phrase": "how can we add and subtract fractions with unlike", "kind": "term"}
+{"id": "q11", "question": "How do I add mixed numbers?", "phrase": "add the whole numbers and add the fractions", "kind": "term"}
+{"id": "q12", "question": "How do I solve x/4 = 3?", "phrase": "what number divided by", "kind": "term"}
+{"id": "q13", "question": "How do I solve -y = 15 when there is a minus sign in front of y?", "phrase": "Does it look as if", "kind": "term"}
+{"id": "q14", "question": "Which is bigger, 0.04 or 0.40?", "phrase": "think of this as money", "kind": "term"}
+{"id": "q15", "question": "How do I round a decimal to the nearest hundredth?", "phrase": "gasoline prices are usually written", "kind": "term"}
+{"id": "q16", "question": "When I multiply decimals, where does the decimal point go?", "phrase": "determine where to place the decimal point", "kind": "paraphrase"}
+{"id": "q17", "question": "How do I divide a decimal by another decimal?", "phrase": "What happens when we divide a decimal by another decimal", "kind": "term"}
+{"id": "q18", "question": "What is a repeating decimal?", "phrase": "resulted in a remainder of zero", "kind": "term"}
+{"id": "q19", "question": "How do I find the area of a circle?", "phrase": "properties of circles have been studied", "kind": "term"}
+{"id": "q20", "question": "What is the mean of a set of numbers?", "phrase": "mean is often called the arithmetic average", "kind": "term"}
+{"id": "q21", "question": "How do I find the middle value of a list of numbers?", "phrase": "line up in order of their heights", "kind": "paraphrase"}
+{"id": "q22", "question": "What is the probability of something happening?", "phrase": "tells us how likely that event is to occur", "kind": "paraphrase"}
+{"id": "q23", "question": "How fast is a car going per hour if it drives 175 miles in 3 hours?", "phrase": "every three hours, Bob will travel", "kind": "paraphrase"}
+{"id": "q24", "question": "How do I tell which pack is cheaper when items are sold in bulk?", "phrase": "packaged together and sold for one price", "kind": "paraphrase"}
+{"id": "q25", "question": "Can you take the square root of a negative number?", "phrase": "Is there a number whose square is", "kind": "term"}
+{"id": "q26", "question": "How do I write a percent as a fraction?", "phrase": "they can easily be expressed as fractions", "kind": "term"}
+{"id": "q27", "question": "How do I work out how much something went up by, as a percent?", "phrase": "talk about how much an amount has increased", "kind": "paraphrase"}
+{"id": "q28", "question": "How do I calculate the sales tax on something I buy?", "phrase": "Sales tax and commissions are applications of percent", "kind": "term"}
+{"id": "q29", "question": "A shirt is on sale for 25% off. How do I find what I pay?", "phrase": "the original price of the item has been reduced", "kind": "paraphrase"}
+{"id": "q30", "question": "What is the formula for simple interest?", "phrase": "The money you put in the bank is called the principal", "kind": "term"}

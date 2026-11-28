@@ -21,3 +21,6 @@ evals/results/
 
 # Local tool settings
 .claude/
+
+# Lampus textbooks: downloaded by lampus/textbooks/fetch.py, never committed
+lampus/textbooks/*/

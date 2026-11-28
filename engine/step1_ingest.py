@@ -55,7 +55,13 @@ def split_documents(pages):
 
 
 def format_page(metadata) -> str:
-    """1-based page number, or "-" for formats without pages (DOCX)."""
+    """1-based page number, or "-" for formats without pages (DOCX).
+
+    A loader that knows the number printed on the page (Lampus's textbooks, whose
+    PDF page 285 is printed page 275) stores it as "page_label", which wins.
+    """
+    if metadata.get("page_label"):
+        return str(metadata["page_label"])
     page = metadata.get("page")
     return "-" if page is None else str(page + 1)
 
